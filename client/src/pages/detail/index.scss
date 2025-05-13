@@ -1,0 +1,382 @@
+// src/pages/detail/index.scss (完整修改版)
+.lottery-detail-page {
+  padding: 20px;
+  background-color: #f8f8f8;
+  min-height: 100vh;
+}
+
+.loading-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+
+  .loading-text {
+    font-size: 16px;
+    color: #666;
+  }
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+
+  .back-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background-color: #fff;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+
+    .back-icon {
+      font-size: 22px;
+      color: #333;
+    }
+  }
+
+  .page-title {
+    font-size: 20px;
+    font-weight: bold;
+    color: #333;
+    flex: 1;
+    text-align: center;
+  }
+
+  .placeholder {
+    width: 36px;
+  }
+}
+
+.lottery-card {
+  background-color: #fff;
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+
+  .lottery-header {
+    margin-bottom: 20px;
+
+    .lottery-title {
+      font-size: 22px;
+      font-weight: bold;
+      color: #333;
+      margin-bottom: 12px;
+      line-height: 1.3;
+    }
+
+    .lottery-status-tag {
+      margin-bottom: 15px;
+
+      .status-tag {
+        display: inline-block;
+        font-size: 13px;
+        padding: 4px 12px;
+        border-radius: 15px;
+
+        &.ongoing {
+          background-color: #e6f7e6;
+          color: #07c160;
+        }
+
+        &.ended {
+          background-color: #f0f0f0;
+          color: #999;
+        }
+      }
+    }
+
+    .sponsor-info {
+      display: flex;
+      align-items: center;
+      margin-top: 10px;
+
+      .sponsor-avatar {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        margin-right: 10px;
+        border: 1px solid #e0e0e0;
+      }
+
+      .sponsor-name {
+        font-size: 14px;
+        color: #666;
+        display: flex;
+        align-items: center;
+
+        .admin-badge {
+          font-size: 10px;
+          color: #fff;
+          background-color: #ff6b81;
+          padding: 2px 6px;
+          border-radius: 8px;
+          margin-left: 5px;
+        }
+      }
+    }
+  }
+
+  .lottery-content {
+    .prize-info {
+      background-color: #f9f9f9;
+      border-radius: 12px;
+      padding: 15px;
+      margin-bottom: 15px;
+
+      .section-title {
+        font-size: 16px;
+        font-weight: bold;
+        color: #333;
+        margin-bottom: 10px;
+      }
+
+      .prize-item {
+        .prize-value {
+          font-size: 15px;
+          color: #333;
+          font-weight: bold;
+          margin-bottom: 5px;
+          display: block;
+        }
+
+        .prize-desc {
+          font-size: 14px;
+          color: #666;
+          line-height: 1.5;
+        }
+      }
+    }
+  }
+}
+
+.lottery-status {
+  display: flex;
+  justify-content: space-between;
+  background-color: #f9f9f9;
+  border-radius: 12px;
+  padding: 15px;
+
+  .status-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+
+    &:first-child {
+      border-right: 1px solid #eee;
+    }
+
+    .status-label {
+      font-size: 13px;
+      color: #999;
+      margin-bottom: 8px;
+    }
+
+    .status-value {
+      font-size: 16px;
+      color: #333;
+      font-weight: bold;
+
+      &.countdown {
+        color: #ff6b81;
+      }
+    }
+  }
+}
+
+.winners-section {
+  background-color: #fff;
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  margin-bottom: 20px;
+
+  .section-title {
+    font-size: 18px;
+    font-weight: bold;
+    color: #333;
+    margin-bottom: 15px;
+  }
+
+  .winners-list {
+    display: flex;
+    flex-wrap: wrap;
+    margin-top: 10px;
+
+    .winner-item {
+      display: flex;
+      align-items: center;
+      margin-right: 15px;
+      margin-bottom: 15px;
+      background-color: #f8f8f8;
+      padding: 8px 12px;
+      border-radius: 20px;
+
+      .winner-avatar {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        margin-right: 8px;
+        border: 1px solid #e0e0e0;
+      }
+
+      .winner-name {
+        font-size: 14px;
+        color: #333;
+        max-width: 80px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+    }
+  }
+}
+
+.action-area {
+  background-color: #fff;
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+
+  .join-btn {
+    width: 90%;
+    height: 44px;
+    line-height: 44px;
+    text-align: center;
+    border-radius: 22px;
+    font-size: 16px;
+    font-weight: bold;
+    color: #fff;
+    background-color: #ff6b81;
+    transition: opacity 0.2s;
+
+    &:active {
+      opacity: 0.8;
+    }
+  }
+
+  .joined-info {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+
+    .joined-text {
+      font-size: 18px;
+      color: #07c160;
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
+
+    .joined-tips {
+      font-size: 14px;
+      color: #999;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+
+    .share-btn {
+      width: 90%;
+      height: 44px;
+      line-height: 44px;
+      text-align: center;
+      border-radius: 22px;
+      font-size: 16px;
+      font-weight: bold;
+      color: #fff;
+      background-color: #4a90e2;
+      transition: opacity 0.2s;
+
+      &:active {
+        opacity: 0.8;
+      }
+    }
+  }
+}
+
+.admin-actions {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
+
+  .draw-btn {
+    background-color: #ff9500;
+    color: #fff;
+    font-size: 15px;
+    padding: 0 30px;
+    height: 40px;
+    line-height: 40px;
+    border-radius: 20px;
+    font-weight: bold;
+    box-shadow: 0 4px 8px rgba(255, 149, 0, 0.2);
+    transition: transform 0.2s;
+
+    &:active {
+      transform: scale(0.98);
+    }
+  }
+}
+
+.rules-section {
+  background-color: #fff;
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  margin-bottom: 20px;
+
+  .section-title {
+    font-size: 18px;
+    font-weight: bold;
+    color: #333;
+    margin-bottom: 15px;
+  }
+
+  .rule-item {
+    display: block;
+    font-size: 14px;
+    color: #666;
+    line-height: 1.6;
+    margin-bottom: 10px;
+    padding-left: 5px;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+}
+
+.error-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 80vh;
+  padding: 0 20px;
+
+  .error-text {
+    font-size: 16px;
+    color: #666;
+    margin-bottom: 20px;
+    text-align: center;
+  }
+
+  .back-btn {
+    background-color: #07c160;
+    color: #fff;
+    padding: 0 30px;
+    height: 40px;
+    line-height: 40px;
+    border-radius: 20px;
+    font-weight: bold;
+  }
+}

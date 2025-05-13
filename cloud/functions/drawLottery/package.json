@@ -1,0 +1,11 @@
+{
+	"name": "drawLottery",
+	"version": "1.0.0",
+	"description": "手动开奖云函数",
+	"main": "index.js",
+	"dependencies": {
+		"wx-server-sdk": "latest"
+	},
+	"author": "",
+	"license": "ISC"
+}
