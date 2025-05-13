@@ -1,4 +1,4 @@
-// cloud/functions/getLotteryDetail/index.js
+// cloud/functions/getLotteryDetail/index.js (完整版含时区修复)
 // 云函数：获取抽奖详情
 
 const cloud = require("wx-server-sdk");
@@ -17,6 +17,7 @@ const participantCollection = db.collection("participants");
 // 主函数
 exports.main = async (event, context) => {
 	const { id } = event;
+	console.log("获取抽奖详情，ID:", id);
 
 	if (!id) {
 		return {
@@ -37,18 +38,31 @@ exports.main = async (event, context) => {
 		}
 
 		const lottery = lotteryResult.data;
+		console.log("抽奖信息原始数据:", lottery);
+
+		// 如果状态是字符串格式，转换为数字格式
+		if (typeof lottery.status === "string") {
+			if (lottery.status === "active") {
+				lottery.status = 0;
+			} else if (lottery.status === "completed") {
+				lottery.status = 1;
+			}
+		}
 
 		// 检查是否需要自动更新状态
-		// 兼容两种状态格式：数字(0,1)和字符串("active","completed")
-		if (lottery.status === 0 || lottery.status === "active") {
+		if (lottery.status === 0) {
 			const endTime = new Date(lottery.endTime);
 			const now = new Date();
+			console.log("当前时间:", now.toISOString());
+			console.log("开奖时间:", endTime.toISOString());
+			console.log("是否已过期:", now > endTime);
 
 			if (now > endTime) {
+				console.log("时间已过，自动更新状态为已结束");
 				// 时间已过，自动更新状态为已结束
 				await lotteryCollection.doc(id).update({
 					data: {
-						status: 1, // 更新为已结束
+						status: 1, // 统一使用数字 1 表示已结束
 						updateTime: db.serverDate(),
 					},
 				});
@@ -58,15 +72,47 @@ exports.main = async (event, context) => {
 			}
 		}
 
-		// 查询创建者信息
-		const creatorResult = await userCollection
-			.where({
-				_openid: lottery.creatorId,
-			})
-			.get();
+		// 处理时区问题 - 如果没有本地时间，创建一个
+		if (!lottery.endTimeLocal && lottery.endTime) {
+			const endTime = new Date(lottery.endTime);
+			// 中国是UTC+8，所以需要减去8小时来显示正确的本地时间
+			const localEndTime = new Date(endTime.getTime() - 8 * 60 * 60 * 1000);
+			lottery.endTimeLocal = localEndTime.toISOString();
+
+			console.log("自动生成本地结束时间:", lottery.endTimeLocal);
+
+			// 异步更新数据库中的记录，不等待结果
+			lotteryCollection
+				.doc(id)
+				.update({
+					data: {
+						endTimeLocal: lottery.endTimeLocal,
+					},
+				})
+				.then(() => {
+					console.log("本地时间更新成功");
+				})
+				.catch((err) => {
+					console.error("本地时间更新失败:", err);
+				});
+		}
+
+		// 查询创建者信息 - 支持多种字段名
+		let creatorResult;
+		if (lottery.creatorId) {
+			creatorResult = await userCollection
+				.where(
+					_.or([{ _openid: lottery.creatorId }, { openid: lottery.creatorId }])
+				)
+				.get();
+		}
 
 		const creator =
-			creatorResult.data.length > 0 ? creatorResult.data[0] : null;
+			creatorResult && creatorResult.data.length > 0
+				? creatorResult.data[0]
+				: null;
+
+		console.log("创建者信息:", creator);
 
 		// 查询参与者
 		const participantsResult = await participantCollection
@@ -76,43 +122,64 @@ exports.main = async (event, context) => {
 			.get();
 
 		const participants = participantsResult.data;
+		console.log("参与者数量:", participants.length);
 
 		// 查询参与者详细信息
 		const participantOpenIds = participants.map((p) => p.openid);
 
 		let participantUsers = [];
 		if (participantOpenIds.length > 0) {
-			const userResult = await userCollection
-				.where({
-					_openid: _.in(participantOpenIds),
-				})
-				.get();
+			// 使用 or 条件查询，兼容两种字段名
+			const userQueries = [];
+			for (const openId of participantOpenIds) {
+				userQueries.push({ _openid: openId });
+				userQueries.push({ openid: openId });
+			}
+
+			const userResult = await userCollection.where(_.or(userQueries)).get();
 
 			participantUsers = userResult.data;
+			console.log("获取到参与者用户信息:", participantUsers.length);
 		}
 
-		// 映射参与者信息
+		// 映射参与者信息 - 使用 openid 或 _openid 作为映射键
 		const participantMap = {};
 		participantUsers.forEach((user) => {
-			participantMap[user._openid] = user;
+			const userKey = user.openid || user._openid;
+			if (userKey) {
+				participantMap[userKey] = user;
+			}
 		});
 
 		// 组合数据
 		const participantsWithUser = participants.map((participant) => {
+			const participantInfo = participantMap[participant.openid] || {};
 			return {
 				...participant,
-				...participantMap[participant.openid],
+				...participantInfo,
 			};
 		});
 
 		// 获取中奖者信息
 		let winners = [];
-		// 兼容两种状态格式：数字(0,1)和字符串("active","completed")
-		const isCompleted = lottery.status === 1 || lottery.status === "completed";
-
-		if (isCompleted && participantsWithUser.length > 0) {
+		if (lottery.status === 1 && participantsWithUser.length > 0) {
 			winners = participantsWithUser.filter((p) => p.isWinner);
+			console.log("中奖者数量:", winners.length);
 		}
+
+		// 时区调试日志
+		console.log("返回抽奖信息:");
+		console.log("原始结束时间:", lottery.endTime);
+		if (lottery.endTimeLocal) {
+			console.log("本地结束时间:", lottery.endTimeLocal);
+		} else {
+			console.log("无本地结束时间");
+		}
+
+		// 时区调试日志
+		const now = new Date();
+		console.log("当前时间:", now.toISOString());
+		console.log("当前时区偏移(分钟):", now.getTimezoneOffset());
 
 		return {
 			success: true,

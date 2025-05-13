@@ -15,19 +15,28 @@ export const getWxLoginCode = async () => {
   }
 };
 
-// 完成微信登录流程 - 云函数版本
+// src/utils/api.js 中的 completeWxLogin 函数优化版
 export const completeWxLogin = async (userInfo) => {
   try {
+    console.log("开始登录流程，用户信息:", userInfo);
+
     // 调用云函数进行登录
     const { result } = await Taro.cloud.callFunction({
       name: "login",
       data: { userInfo },
     });
 
+    console.log("登录云函数返回结果:", result);
+
     if (result && result.success) {
+      // 确保用户信息包含 _openid 字段
+      const userData = result.data;
+
       // 存储用户信息
-      Taro.setStorageSync("userInfo", result.data);
-      return { user: result.data };
+      Taro.setStorageSync("userInfo", userData);
+      console.log("已保存用户信息到本地:", userData);
+
+      return { user: userData };
     } else {
       throw new Error(result?.message || "登录失败");
     }
@@ -115,13 +124,21 @@ export const getLotteryList = async (params = {}) => {
   }
 };
 
-// 获取抽奖详情 - 云函数版本
+// src/utils/api.js 中 getLotteryDetail 函数修改
 export const getLotteryDetail = async (id) => {
   try {
+    console.log("调用getLotteryDetail API，参数ID:", id);
+
+    if (!id) {
+      throw new Error("抽奖ID不能为空");
+    }
+
     const { result } = await Taro.cloud.callFunction({
       name: "getLotteryDetail",
       data: { id },
     });
+
+    console.log("getLotteryDetail返回结果:", result);
 
     if (!result) {
       throw new Error("获取抽奖详情失败");
@@ -134,16 +151,26 @@ export const getLotteryDetail = async (id) => {
   }
 };
 
-// 创建抽奖活动 - 云函数版本
+// src/utils/api.js 中的 createLottery 函数优化版
 export const createLottery = async (data) => {
   try {
+    console.log("开始调用创建抽奖云函数，参数:", data);
+
+    // 确保 prizeCount 是数字类型
+    if (data.prizeCount && typeof data.prizeCount === "string") {
+      data.prizeCount = parseInt(data.prizeCount);
+    }
+
+    // 调用云函数创建抽奖
     const { result } = await Taro.cloud.callFunction({
       name: "createLottery",
       data,
     });
 
+    console.log("创建抽奖云函数返回结果:", result);
+
     if (!result) {
-      throw new Error("创建抽奖失败");
+      throw new Error("创建抽奖失败，返回结果为空");
     }
 
     return result;

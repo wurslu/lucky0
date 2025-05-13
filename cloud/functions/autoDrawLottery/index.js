@@ -1,4 +1,3 @@
-// cloud/functions/autoDrawLottery/index.js
 // 云函数：自动开奖（定时触发）
 
 const cloud = require("wx-server-sdk");
@@ -23,16 +22,21 @@ function getRandomItems(array, count) {
 exports.main = async (event, context) => {
 	try {
 		const now = new Date();
+		console.log("自动开奖函数执行，当前时间:", now.toISOString());
 
 		// 查询所有已到开奖时间但未开奖的抽奖活动
+		// 兼容两种状态格式，但会统一转换为数字格式
 		const lotteryResult = await lotteryCollection
-			.where({
-				status: "active",
-				endTime: _.lte(now),
-			})
+			.where(
+				_.or([
+					{ status: 0, endTime: _.lte(now) },
+					{ status: "active", endTime: _.lte(now) },
+				])
+			)
 			.get();
 
 		const lotteries = lotteryResult.data;
+		console.log("找到需要自动开奖的活动:", lotteries.length);
 
 		if (lotteries.length === 0) {
 			return {
@@ -46,6 +50,8 @@ exports.main = async (event, context) => {
 
 		for (const lottery of lotteries) {
 			try {
+				console.log("处理抽奖:", lottery._id, lottery.title);
+
 				// 查询所有参与者
 				const participantsResult = await participantCollection
 					.where({
@@ -54,52 +60,40 @@ exports.main = async (event, context) => {
 					.get();
 
 				const participants = participantsResult.data;
+				console.log("参与者数量:", participants.length);
+
+				// 首先更新抽奖状态为已结束，统一使用数字格式
+				await lotteryCollection.doc(lottery._id).update({
+					data: {
+						status: 1, // 统一使用数字 1 表示已结束
+						updateTime: db.serverDate(),
+						winnerCount: 0, // 默认设置为0
+					},
+				});
 
 				if (participants.length === 0) {
-					// 无人参与，直接标记为已结束
-					await lotteryCollection.doc(lottery._id).update({
-						data: {
-							status: "completed",
-							updateTime: db.serverDate(),
-							winnerCount: 0,
-						},
-					});
-
+					// 无人参与，已标记为已结束
 					results.push({
 						lotteryId: lottery._id,
 						title: lottery.title,
-						status: "completed",
+						status: 1,
 						message: "无人参与，已结束",
 					});
-
 					continue;
 				}
 
 				// 确定中奖人数（不超过参与人数和设置的奖品数量）
 				const winnerCount = Math.min(lottery.prizeCount, participants.length);
+				console.log("中奖人数:", winnerCount);
 
 				// 随机选取中奖者
 				const winners = getRandomItems(participants, winnerCount);
 				const winnerIds = winners.map((w) => w._id);
+				console.log("选取的中奖者:", winnerIds.length);
 
-				const transaction = await db.startTransaction();
-
-				try {
-					// 1. 更新抽奖状态为已结束
-					await transaction
-						.collection("lotteries")
-						.doc(lottery._id)
-						.update({
-							data: {
-								status: "completed",
-								updateTime: db.serverDate(),
-								winnerCount,
-							},
-						});
-
-					// 2. 更新中奖者状态
-					await transaction
-						.collection("participants")
+				// 更新中奖者状态
+				if (winnerIds.length > 0) {
+					await participantCollection
 						.where({
 							_id: _.in(winnerIds),
 						})
@@ -109,22 +103,24 @@ exports.main = async (event, context) => {
 								updateTime: db.serverDate(),
 							},
 						});
-
-					// 提交事务
-					await transaction.commit();
-
-					results.push({
-						lotteryId: lottery._id,
-						title: lottery.title,
-						status: "completed",
-						winnerCount,
-						message: "自动开奖成功",
-					});
-				} catch (error) {
-					// 事务失败，回滚
-					await transaction.rollback();
-					throw error;
 				}
+
+				// 更新抽奖记录的中奖人数
+				await lotteryCollection.doc(lottery._id).update({
+					data: {
+						winnerCount,
+					},
+				});
+
+				console.log("自动开奖成功:", lottery._id);
+
+				results.push({
+					lotteryId: lottery._id,
+					title: lottery.title,
+					status: 1,
+					winnerCount,
+					message: "自动开奖成功",
+				});
 			} catch (error) {
 				console.error(`处理抽奖活动 ${lottery._id} 失败:`, error);
 				results.push({
@@ -145,21 +141,8 @@ exports.main = async (event, context) => {
 		console.error("自动开奖执行失败", error);
 		return {
 			success: false,
-			message: "自动开奖执行失败",
-			error,
+			message: "自动开奖执行失败: " + error.message,
+			error: error.message,
 		};
 	}
 };
-
-// 云函数触发器配置：
-// {
-//   "config": {
-//     "triggers": [
-//       {
-//         "name": "myTrigger",
-//         "type": "timer",
-//         "config": "0 */5 * * * * *"  // 每5分钟触发一次
-//       }
-//     ]
-//   }
-// }

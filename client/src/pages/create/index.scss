@@ -1,4 +1,4 @@
-// src/pages/create/index.scss (完整修改版)
+// src/pages/create/index.scss (优化版)
 .loading-container {
   display: flex;
   justify-content: center;
@@ -167,5 +167,116 @@
   &.button-disabled {
     background-color: #c8c8c8;
     box-shadow: none;
+  }
+}
+
+/* 新增样式 - 快速时间选择 */
+.quick-time-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.quick-time-option {
+  flex: 1;
+  min-width: 28%;
+  text-align: center;
+  padding: 8px 12px;
+  background-color: #f0f0f0;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #333;
+  transition: all 0.2s;
+
+  &.active {
+    background-color: #07c160;
+    color: #fff;
+    font-weight: bold;
+  }
+
+  &:active {
+    transform: scale(0.95);
+  }
+}
+
+/* 开奖时间预览 */
+.time-preview {
+  background-color: #f9f9f9;
+  border-radius: 8px;
+  padding: 12px 15px;
+  margin-top: 15px;
+  border-left: 3px solid #07c160;
+
+  .time-preview-label {
+    font-size: 14px;
+    color: #666;
+    margin-right: 5px;
+  }
+
+  .time-preview-value {
+    font-size: 15px;
+    color: #07c160;
+    font-weight: bold;
+  }
+}
+
+/* 奖品数量控制 */
+.prize-count-container {
+  display: flex;
+  align-items: center;
+}
+
+.prize-count-input {
+  flex: 1;
+  text-align: center;
+}
+
+.prize-count-controls {
+  display: flex;
+  margin-left: 10px;
+}
+
+.prize-count-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: #f0f0f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: bold;
+  color: #333;
+  margin-left: 5px;
+  transition: all 0.2s;
+
+  &:active {
+    background-color: #e0e0e0;
+    transform: scale(0.9);
+  }
+}
+
+/* 奖品快速选择 */
+.prize-quick-select {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.prize-quick-option {
+  flex: 1;
+  text-align: center;
+  padding: 8px 0;
+  background-color: #f0f0f0;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: bold;
+  color: #333;
+  transition: all 0.2s;
+
+  &:active {
+    background-color: #e0e0e0;
+    transform: scale(0.95);
   }
 }

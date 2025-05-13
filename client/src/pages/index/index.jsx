@@ -163,9 +163,18 @@ useEffect(() => {
       fetchLotteryList(false);
     }
   };
-
-  // 跳转到抽奖详情页
   const goToLotteryDetail = async (lotteryId) => {
+    console.log("点击抽奖卡片，ID:", lotteryId);
+
+    if (!lotteryId) {
+      console.error("抽奖ID为空");
+      Taro.showToast({
+        title: '抽奖信息无效',
+        icon: 'none'
+      });
+      return;
+    }
+
     // 如果未登录，先登录
     if (!userInfo) {
       try {
@@ -177,8 +186,19 @@ useEffect(() => {
       }
     }
 
+    // 使用明确的导航参数，确保ID正确传递
     Taro.navigateTo({
       url: `/pages/detail/index?lotteryId=${lotteryId}`,
+      success: function() {
+        console.log("成功导航到详情页，ID:", lotteryId);
+      },
+      fail: function(error) {
+        console.error("导航到详情页失败:", error);
+        Taro.showToast({
+          title: '页面跳转失败',
+          icon: 'none'
+        });
+      }
     });
   };
 
@@ -282,10 +302,11 @@ useEffect(() => {
         {lotteryList.length > 0 ? (
           lotteryList.map((lottery) => (
             <View
-              key={lottery._id} // 云开发中使用 _id 作为主键
-              className='lottery-card'
-              onClick={() => goToLotteryDetail(lottery._id)}
-            >
+  key={lottery._id} // 使用 _id 作为 key
+  className='lottery-card'
+  onClick={() => goToLotteryDetail(lottery._id)}
+  data-id={lottery._id} // 添加数据属性
+>
               <View className='lottery-header'>
                 <Text className='lottery-title'>{lottery.title}</Text>
                 <View className='lottery-status'>
@@ -319,13 +340,13 @@ useEffect(() => {
                   <View className='stat-item'>
                     <Text className='stat-label'>开奖</Text>
                     <Text className='stat-value'>
-                      {new Date(lottery.endTime).toLocaleDateString('zh-CN', {
-                        month: 'numeric',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      }).replace(/\//g, '/')}
-                    </Text>
+  {new Date(lottery.endTimeLocal || lottery.endTime).toLocaleString('zh-CN', {
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).replace(/\//g, '/')}
+</Text>
                   </View>
                 </View>
               </View>
