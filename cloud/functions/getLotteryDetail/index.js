@@ -1,4 +1,4 @@
-// cloud/functions/getLotteryDetail/index.js (完整版含时区修复)
+// cloud/functions/getLotteryDetail/index.js (完整修改版)
 // 云函数：获取抽奖详情
 
 const cloud = require("wx-server-sdk");
@@ -38,28 +38,46 @@ exports.main = async (event, context) => {
 		}
 
 		const lottery = lotteryResult.data;
-		console.log("抽奖信息原始数据:", lottery);
+		console.log("抽奖原始信息:", lottery);
 
 		// 如果状态是字符串格式，转换为数字格式
 		if (typeof lottery.status === "string") {
 			if (lottery.status === "active") {
 				lottery.status = 0;
+
+				// 自动更新数据库中的状态为数字格式
+				await lotteryCollection.doc(id).update({
+					data: {
+						status: 0,
+					},
+				});
+				console.log("已自动修正状态格式: 'active' -> 0");
 			} else if (lottery.status === "completed") {
 				lottery.status = 1;
+
+				// 自动更新数据库中的状态为数字格式
+				await lotteryCollection.doc(id).update({
+					data: {
+						status: 1,
+					},
+				});
+				console.log("已自动修正状态格式: 'completed' -> 1");
 			}
 		}
 
-		// 检查是否需要自动更新状态
+		// 检查是否需要自动更新状态（如果已过期但状态仍为进行中）
 		if (lottery.status === 0) {
 			const endTime = new Date(lottery.endTime);
 			const now = new Date();
+
 			console.log("当前时间:", now.toISOString());
 			console.log("开奖时间:", endTime.toISOString());
 			console.log("是否已过期:", now > endTime);
 
 			if (now > endTime) {
 				console.log("时间已过，自动更新状态为已结束");
-				// 时间已过，自动更新状态为已结束
+
+				// 更新状态为已结束
 				await lotteryCollection.doc(id).update({
 					data: {
 						status: 1, // 统一使用数字 1 表示已结束
@@ -75,13 +93,11 @@ exports.main = async (event, context) => {
 		// 处理时区问题 - 如果没有本地时间，创建一个
 		if (!lottery.endTimeLocal && lottery.endTime) {
 			const endTime = new Date(lottery.endTime);
-			// 中国是UTC+8，所以需要减去8小时来显示正确的本地时间
-			const localEndTime = new Date(endTime.getTime() - 8 * 60 * 60 * 1000);
-			lottery.endTimeLocal = localEndTime.toISOString();
+			lottery.endTimeLocal = endTime.toISOString();
 
-			console.log("自动生成本地结束时间:", lottery.endTimeLocal);
+			console.log("添加本地结束时间:", lottery.endTimeLocal);
 
-			// 异步更新数据库中的记录，不等待结果
+			// 更新数据库中的记录
 			lotteryCollection
 				.doc(id)
 				.update({
@@ -90,10 +106,10 @@ exports.main = async (event, context) => {
 					},
 				})
 				.then(() => {
-					console.log("本地时间更新成功");
+					console.log("本地时间添加成功");
 				})
 				.catch((err) => {
-					console.error("本地时间更新失败:", err);
+					console.error("本地时间添加失败:", err);
 				});
 		}
 
@@ -167,20 +183,6 @@ exports.main = async (event, context) => {
 			console.log("中奖者数量:", winners.length);
 		}
 
-		// 时区调试日志
-		console.log("返回抽奖信息:");
-		console.log("原始结束时间:", lottery.endTime);
-		if (lottery.endTimeLocal) {
-			console.log("本地结束时间:", lottery.endTimeLocal);
-		} else {
-			console.log("无本地结束时间");
-		}
-
-		// 时区调试日志
-		const now = new Date();
-		console.log("当前时间:", now.toISOString());
-		console.log("当前时区偏移(分钟):", now.getTimezoneOffset());
-
 		return {
 			success: true,
 			data: {
@@ -194,7 +196,7 @@ exports.main = async (event, context) => {
 		console.error("获取抽奖详情失败", error);
 		return {
 			success: false,
-			message: "获取抽奖详情失败",
+			message: "获取抽奖详情失败: " + error.message,
 			error: error.message,
 		};
 	}

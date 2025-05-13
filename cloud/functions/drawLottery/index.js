@@ -1,3 +1,4 @@
+// cloud/functions/drawLottery/index.js (完整修改版)
 // 云函数：开奖
 
 const cloud = require("wx-server-sdk");
@@ -48,14 +49,25 @@ exports.main = async (event, context) => {
 		const lottery = lotteryResult.data;
 		console.log("抽奖信息:", lottery);
 
-		// 将字符串状态转换为数字状态
-		let status = lottery.status;
-		if (typeof status === "string") {
-			status = status === "active" ? 0 : status === "completed" ? 1 : status;
+		// 如果状态是字符串格式，转换为数字格式并更新数据库
+		if (typeof lottery.status === "string") {
+			if (lottery.status === "active") {
+				lottery.status = 0;
+				await lotteryCollection.doc(id).update({
+					data: { status: 0 },
+				});
+				console.log("已修正状态格式: 'active' -> 0");
+			} else if (lottery.status === "completed") {
+				lottery.status = 1;
+				await lotteryCollection.doc(id).update({
+					data: { status: 1 },
+				});
+				console.log("已修正状态格式: 'completed' -> 1");
+			}
 		}
 
 		// 检查抽奖状态
-		if (status === 1) {
+		if (lottery.status === 1) {
 			return {
 				success: false,
 				message: "该抽奖已结束",
@@ -82,7 +94,7 @@ exports.main = async (event, context) => {
 		const user = userResult.data[0];
 		console.log("当前用户信息:", user);
 
-		// 检查是否是创建者或管理员 - 兼容两种字段
+		// 检查是否是创建者或管理员 - 兼容多种字段
 		const isCreator =
 			lottery.creatorId === wxContext.OPENID ||
 			lottery._openid === wxContext.OPENID ||
@@ -139,17 +151,19 @@ exports.main = async (event, context) => {
 				});
 
 			// 2. 更新中奖者状态
-			await transaction
-				.collection("participants")
-				.where({
-					_id: _.in(winnerIds),
-				})
-				.update({
-					data: {
-						isWinner: true,
-						updateTime: db.serverDate(),
-					},
-				});
+			if (winnerIds.length > 0) {
+				await transaction
+					.collection("participants")
+					.where({
+						_id: _.in(winnerIds),
+					})
+					.update({
+						data: {
+							isWinner: true,
+							updateTime: db.serverDate(),
+						},
+					});
+			}
 
 			// 提交事务
 			await transaction.commit();

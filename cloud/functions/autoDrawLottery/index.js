@@ -1,3 +1,4 @@
+// cloud/functions/autoDrawLottery/index.js (完整修改版)
 // 云函数：自动开奖（定时触发）
 
 const cloud = require("wx-server-sdk");
@@ -25,7 +26,7 @@ exports.main = async (event, context) => {
 		console.log("自动开奖函数执行，当前时间:", now.toISOString());
 
 		// 查询所有已到开奖时间但未开奖的抽奖活动
-		// 兼容两种状态格式，但会统一转换为数字格式
+		// 支持多种状态格式
 		const lotteryResult = await lotteryCollection
 			.where(
 				_.or([
