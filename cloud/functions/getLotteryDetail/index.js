@@ -1,4 +1,4 @@
-// cloud/functions/getLotteryDetail/index.js - 完整优化版
+// cloud/functions/getLotteryDetail/index.js - 修复版，统一使用_openid
 const cloud = require("wx-server-sdk");
 
 // 初始化云环境
@@ -141,13 +141,13 @@ exports.main = async (event, context) => {
 			}
 		}
 
-		// 查询创建者信息 - 支持多种字段名
+		// 查询创建者信息 - 统一使用_openid
 		let creatorResult;
 		if (lottery.creatorId) {
 			creatorResult = await userCollection
-				.where(
-					_.or([{ _openid: lottery.creatorId }, { openid: lottery.creatorId }])
-				)
+				.where({
+					_openid: lottery.creatorId,
+				})
 				.get();
 		}
 
@@ -168,36 +168,33 @@ exports.main = async (event, context) => {
 		const participants = participantsResult.data;
 		console.log("参与者数量:", participants.length);
 
-		// 查询参与者详细信息
-		const participantOpenIds = participants.map((p) => p.openid);
+		// 查询参与者详细信息 - 统一使用_openid
+		const participantOpenIds = participants.map((p) => p._openid);
 
 		let participantUsers = [];
 		if (participantOpenIds.length > 0) {
-			// 使用 or 条件查询，兼容两种字段名
-			const userQueries = [];
-			for (const openId of participantOpenIds) {
-				userQueries.push({ _openid: openId });
-				userQueries.push({ openid: openId });
-			}
-
-			const userResult = await userCollection.where(_.or(userQueries)).get();
+			// 统一使用_openid字段查询
+			const userResult = await userCollection
+				.where({
+					_openid: _.in(participantOpenIds),
+				})
+				.get();
 
 			participantUsers = userResult.data;
 			console.log("获取到参与者用户信息:", participantUsers.length);
 		}
 
-		// 映射参与者信息 - 使用 openid 或 _openid 作为映射键
+		// 映射参与者信息 - 统一使用_openid
 		const participantMap = {};
 		participantUsers.forEach((user) => {
-			const userKey = user.openid || user._openid;
-			if (userKey) {
-				participantMap[userKey] = user;
+			if (user._openid) {
+				participantMap[user._openid] = user;
 			}
 		});
 
 		// 组合数据
 		const participantsWithUser = participants.map((participant) => {
-			const participantInfo = participantMap[participant.openid] || {};
+			const participantInfo = participantMap[participant._openid] || {};
 			return {
 				...participant,
 				...participantInfo,
@@ -207,47 +204,56 @@ exports.main = async (event, context) => {
 		// 判断抽奖是否已结束 - 使用时间工具函数
 		const isEnded = isTimeExpired(lottery.endTimeLocal || lottery.endTime);
 
-		// 获取中奖者信息 - 优化版，无需依赖isEnded标志
+		// 获取中奖者信息
 		let winners = [];
-		// 直接查询中奖者 - 使用hasDrawn字段或isWinner条件
-		if (participantsWithUser.length > 0) {
-			if (lottery.hasDrawn) {
-				// 方法1: 直接使用标记为已开奖的记录，查询所有中奖者
-				winners = participantsWithUser.filter((p) => p.isWinner);
-				console.log("通过isWinner过滤得到中奖者数量:", winners.length);
+
+		if (lottery.hasDrawn && participantsWithUser.length > 0) {
+			// 直接查询中奖者记录
+			const winnersResult = await participantCollection
+				.where({
+					lotteryId: id,
+					isWinner: true,
+				})
+				.get();
+
+			if (winnersResult.data && winnersResult.data.length > 0) {
+				console.log("找到中奖者记录:", winnersResult.data.length);
+
+				// 将找到的中奖者与用户信息合并
+				winners = winnersResult.data.map((winnerData) => {
+					// 查找匹配的用户信息
+					const userInfo = participantMap[winnerData._openid] || {};
+					return {
+						...winnerData,
+						...userInfo,
+					};
+				});
+
+				console.log("处理后的中奖者:", winners.length);
+			} else {
+				console.log("通过查询未找到中奖者记录");
 			}
+		}
 
-			// 如果首次过滤没有找到中奖者，尝试通过数据库直接查询
-			if (winners.length === 0) {
-				try {
-					console.log("尝试直接查询中奖者");
-					const winnersResult = await participantCollection
-						.where({
-							lotteryId: id,
-							isWinner: true,
-						})
-						.get();
+		// 即使没有中奖者记录，也尝试从参与者中筛选isWinner为true的记录
+		if (winners.length === 0 && lottery.hasDrawn) {
+			winners = participantsWithUser.filter((p) => p.isWinner === true);
+			console.log("从参与者中筛选出的中奖者:", winners.length);
+		}
 
-					if (winnersResult.data && winnersResult.data.length > 0) {
-						// 找到中奖者，但可能需要填充用户信息
-						const winnerIds = winnersResult.data.map((w) => w._id);
-						console.log("通过数据库查询找到中奖者IDs:", winnerIds);
+		// 更新抽奖记录中的实际中奖人数
+		if (lottery.hasDrawn && lottery.winnerCount !== winners.length) {
+			console.log(`更新中奖人数: ${lottery.winnerCount} -> ${winners.length}`);
 
-						// 将找到的中奖者与现有用户信息合并
-						winners = winnersResult.data.map((winnerData) => {
-							// 查找匹配的用户信息
-							const participant = participantsWithUser.find(
-								(p) => p._id === winnerData._id
-							);
-							return participant || winnerData; // 如果找到匹配的参与者则使用，否则使用原始数据
-						});
-					}
-				} catch (error) {
-					console.error("直接查询中奖者失败:", error);
-				}
+			try {
+				await lotteryCollection.doc(id).update({
+					data: {
+						winnerCount: winners.length,
+					},
+				});
+			} catch (error) {
+				console.error("更新中奖人数失败:", error);
 			}
-
-			console.log("最终获取到的中奖者数量:", winners.length);
 		}
 
 		return {

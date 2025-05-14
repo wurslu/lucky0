@@ -1,4 +1,4 @@
-// client/src/pages/detail/hooks/useDetail.js
+// client/src/pages/detail/hooks/useDetail.js - 修复版，统一使用_openid (续)
 import { useState, useEffect, useRef } from "react";
 import Taro from "@tarojs/taro";
 import {
@@ -39,10 +39,9 @@ export function useDetail() {
   const isUserWinner = () => {
     if (!userInfo || !lotteryInfo || !lotteryInfo.winners) return false;
 
-    const userOpenid = userInfo._openid || userInfo.openid;
-    return lotteryInfo.winners.some(
-      (winner) => winner._openid === userOpenid || winner.openid === userOpenid
-    );
+    // 统一使用_openid
+    const userOpenid = userInfo._openid;
+    return lotteryInfo.winners.some((winner) => winner._openid === userOpenid);
   };
 
   useEffect(() => {
@@ -163,19 +162,19 @@ export function useDetail() {
         // 更新抽奖信息
         setLotteryInfo(result.data);
 
-        // 检查当前用户是否是创建者
+        // 检查当前用户是否是创建者 - 统一使用_openid
         if (
           userInfo &&
           (result.data.creatorId === userInfo._openid ||
-            result.data.creatorId === userInfo.openid)
+            result.data._openid === userInfo._openid)
         ) {
           setIsCreator(true);
         }
 
-        // 检查当前用户是否已参与
+        // 检查当前用户是否已参与 - 统一使用_openid
         if (userInfo && result.data.participants) {
           const hasJoined = result.data.participants.some(
-            (p) => p.openid === userInfo._openid || p.openid === userInfo.openid
+            (p) => p._openid === userInfo._openid
           );
           setJoined(hasJoined);
         }
@@ -429,7 +428,7 @@ export function useDetail() {
     });
   };
 
-  // 返回首页
+  // 返回上一页
   const goBack = () => {
     Taro.navigateBack();
   };

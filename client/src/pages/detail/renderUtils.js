@@ -1,4 +1,4 @@
-// client/src/pages/detail/renderUtils.js - 修改版
+// client/src/pages/detail/renderUtils.js - 修复版，统一使用_openid
 import React from "react";
 import { View, Text, Image } from "@tarojs/components";
 
@@ -9,7 +9,7 @@ export const renderWinners = (
   lotteryInfo,
   isLotteryEnded,
   handleImageError,
-  handleManualRefresh // 添加手动刷新函数
+  handleManualRefresh
 ) => {
   if (!lotteryInfo) {
     return null;

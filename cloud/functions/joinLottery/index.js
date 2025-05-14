@@ -1,4 +1,4 @@
-// cloud/functions/joinLottery/index.js - 移除status依赖的版本
+// cloud/functions/joinLottery/index.js - 修复版，统一使用_openid
 const cloud = require("wx-server-sdk");
 
 // 初始化云环境
@@ -51,11 +51,11 @@ exports.main = async (event, context) => {
 			};
 		}
 
-		// 检查是否已参与
+		// 检查是否已参与 - 统一使用_openid字段
 		const participantResult = await participantCollection
 			.where({
 				lotteryId,
-				openid: wxContext.OPENID,
+				_openid: wxContext.OPENID,
 			})
 			.count();
 
@@ -66,11 +66,11 @@ exports.main = async (event, context) => {
 			};
 		}
 
-		// 加入抽奖
+		// 加入抽奖 - 使用_openid字段
 		await participantCollection.add({
 			data: {
 				lotteryId,
-				openid: wxContext.OPENID,
+				_openid: wxContext.OPENID,
 				isWinner: false,
 				joinTime: db.serverDate(),
 				updateTime: db.serverDate(),

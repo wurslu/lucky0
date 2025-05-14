@@ -1,4 +1,4 @@
-// cloud/functions/createLottery/index.js - 完整版，修复时间问题
+// cloud/functions/createLottery/index.js - 修复版，统一使用_openid
 const cloud = require("wx-server-sdk");
 
 // 初始化云环境
@@ -85,10 +85,10 @@ exports.main = async (event, context) => {
 	try {
 		console.log("当前用户OPENID:", wxContext.OPENID);
 
-		// 检查用户权限 - 同时检查两种可能的字段名称
+		// 检查用户权限 - 只使用_openid字段
 		const userResult = await userCollection
 			.where({
-				$or: [{ _openid: wxContext.OPENID }, { openid: wxContext.OPENID }],
+				_openid: wxContext.OPENID,
 			})
 			.get();
 
@@ -127,8 +127,7 @@ exports.main = async (event, context) => {
 				endTime: endDateTime,
 				prizeCount: parseInt(prizeCount),
 				creatorId: wxContext.OPENID,
-				_openid: wxContext.OPENID,
-				openid: wxContext.OPENID,
+				_openid: wxContext.OPENID, // 只使用_openid
 				createTime: now,
 				updateTime: now,
 			},

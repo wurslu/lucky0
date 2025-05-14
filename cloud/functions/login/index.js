@@ -1,4 +1,4 @@
-// cloud/functions/login/index.js (优化版)
+// cloud/functions/login/index.js - 修复版，统一使用_openid
 const cloud = require("wx-server-sdk");
 
 // 初始化云环境
@@ -25,7 +25,7 @@ exports.main = async (event, context) => {
 		console.log("当前用户OPENID:", wxContext.OPENID);
 		console.log("登录传入的用户信息:", userInfo);
 
-		// 查询此openid是否已存在 - 同时检查两个可能的字段名
+		// 查询此openid是否已存在 - 统一使用_openid
 		let userResult = await db
 			.collection("users")
 			.where({
@@ -33,25 +33,14 @@ exports.main = async (event, context) => {
 			})
 			.get();
 
-		if (userResult.data.length === 0) {
-			// 尝试使用 openid 字段
-			userResult = await db
-				.collection("users")
-				.where({
-					openid: wxContext.OPENID,
-				})
-				.get();
-		}
-
 		if (userResult.data.length > 0) {
 			// 用户已存在，更新用户信息
 			const userData = {
 				nickName: userInfo.nickName,
 				avatarUrl: userInfo.avatarUrl,
 				lastLoginTime: db.serverDate(),
-				// 确保两个字段都存在
+				// 只使用_openid字段
 				_openid: wxContext.OPENID,
-				openid: wxContext.OPENID,
 			};
 
 			// 根据找到用户的ID更新
@@ -72,8 +61,7 @@ exports.main = async (event, context) => {
 		} else {
 			// 用户不存在，创建新用户
 			const newUser = {
-				_openid: wxContext.OPENID,
-				openid: wxContext.OPENID, // 同时存储两个字段
+				_openid: wxContext.OPENID, // 只使用_openid字段
 				nickName: userInfo.nickName,
 				avatarUrl: userInfo.avatarUrl,
 				isAdmin: false, // 默认非管理员

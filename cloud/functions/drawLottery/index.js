@@ -1,4 +1,4 @@
-// cloud/functions/drawLottery/index.js - 完整优化版
+// cloud/functions/drawLottery/index.js - 修复版，统一使用_openid
 const cloud = require("wx-server-sdk");
 
 // 初始化云环境
@@ -70,12 +70,11 @@ exports.main = async (event, context) => {
 			}
 		}
 
-		// 查询当前用户信息，检查是否有权限操作
-		// 支持 _openid 和 openid 两种字段
+		// 查询当前用户信息，检查是否有权限操作 - 只使用_openid
 		const userResult = await userCollection
-			.where(
-				_.or([{ _openid: wxContext.OPENID }, { openid: wxContext.OPENID }])
-			)
+			.where({
+				_openid: wxContext.OPENID,
+			})
 			.get();
 
 		console.log("用户查询结果:", userResult);
@@ -90,11 +89,10 @@ exports.main = async (event, context) => {
 		const user = userResult.data[0];
 		console.log("当前用户信息:", user);
 
-		// 检查是否是创建者或管理员 - 兼容多种字段
+		// 检查是否是创建者或管理员 - 只使用_openid
 		const isCreator =
 			lottery.creatorId === wxContext.OPENID ||
-			lottery._openid === wxContext.OPENID ||
-			lottery.openid === wxContext.OPENID;
+			lottery._openid === wxContext.OPENID;
 
 		if (!isCreator && !user.isAdmin) {
 			return {
@@ -121,6 +119,7 @@ exports.main = async (event, context) => {
 					winnerCount: 0,
 					hasDrawn: true, // 新增字段，标记已开奖
 					noParticipants: true, // 新增字段，标记无人参与
+					drawTime: db.serverDate(), // 添加开奖时间
 					updateTime: db.serverDate(),
 				},
 			});
@@ -173,6 +172,7 @@ exports.main = async (event, context) => {
 						winnerCount,
 						hasDrawn: true,
 						noParticipants: false,
+						drawTime: db.serverDate(), // 添加开奖时间
 						updateTime: db.serverDate(),
 					},
 				});

@@ -1,6 +1,4 @@
-// client/src/utils/api.js - 修改版本，移除对status字段的引用
-
-// src/utils/api.js (云开发版)
+// client/src/utils/api.js - 修复版，统一使用_openid
 import Taro from "@tarojs/taro";
 
 // 获取微信登录凭证
