@@ -36,6 +36,15 @@ export function useDetail() {
   const [countdown, setCountdown] = useState("00:00:00");
   const [countdownTimer, setCountdownTimer] = useState(null);
 
+  const isUserWinner = () => {
+    if (!userInfo || !lotteryInfo || !lotteryInfo.winners) return false;
+
+    const userOpenid = userInfo._openid || userInfo.openid;
+    return lotteryInfo.winners.some(
+      (winner) => winner._openid === userOpenid || winner.openid === userOpenid
+    );
+  };
+
   useEffect(() => {
     const params = Taro.getCurrentInstance().router.params;
     console.log("获取到路由参数:", params);
@@ -512,5 +521,6 @@ export function useDetail() {
     testUtils,
     formatChineseTime,
     formatShortChineseTime,
+    isUserWinner: isUserWinner(),
   };
 }

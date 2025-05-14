@@ -425,3 +425,73 @@
   color: white;
   font-size: 14px;
 }
+/* 添加到 client/src/pages/detail/index.scss */
+
+/* 中奖状态样式 */
+.winning-status-section {
+  margin-bottom: 20px;
+}
+
+.winning-status-card {
+  border-radius: 16px;
+  padding: 25px 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+
+  &.winner {
+    background: linear-gradient(135deg, #fef9c3, #fef08a);
+    border: 2px solid #facc15;
+  }
+
+  &.loser {
+    background: linear-gradient(135deg, #f1f5f9, #e2e8f0);
+    border: 2px solid #cbd5e1;
+  }
+
+  &.neutral {
+    background: linear-gradient(135deg, #e0f2fe, #bae6fd);
+    border: 2px solid #7dd3fc;
+  }
+
+  .status-icon {
+    font-size: 36px;
+    margin-bottom: 15px;
+  }
+
+  .status-title {
+    font-size: 20px;
+    font-weight: bold;
+    color: #333;
+    margin-bottom: 10px;
+  }
+
+  .status-message {
+    font-size: 15px;
+    color: #666;
+    margin-bottom: 20px;
+    line-height: 1.4;
+  }
+
+  .share-win-btn {
+    background-color: #facc15;
+    color: #7c2d12;
+    font-size: 15px;
+    font-weight: bold;
+    padding: 8px 20px;
+    border-radius: 20px;
+    margin-top: 10px;
+    box-shadow: 0 2px 6px rgba(250, 204, 21, 0.4);
+  }
+
+  .winners-count {
+    margin-top: 5px;
+    font-size: 14px;
+    color: #666;
+    background-color: rgba(255, 255, 255, 0.5);
+    padding: 5px 15px;
+    border-radius: 15px;
+  }
+}

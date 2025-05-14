@@ -8,6 +8,7 @@ import LotteryCard from './components/LotteryCard';
 import ActionButtons from './components/ActionButtons';
 import RulesSection from './components/RulesSection';
 import TestButtons from './components/TestButtons';
+import WinningStatus from './components/WinningStatus';
 import './index.scss';
 
 const Detail = () => {
@@ -84,6 +85,16 @@ const Detail = () => {
         formatShortChineseTime={formatShortChineseTime}
         handleImageError={handleImageError}
       />
+
+{/* 中奖状态提示组件 - 明确显示用户是否中奖 */}
+{lotteryInfo.hasDrawn && (
+        <WinningStatus
+          lotteryInfo={lotteryInfo}
+          userInfo={userInfo}
+          handleManualRefresh={handleManualRefresh}
+          handleImageError={handleImageError}
+        />
+      )}
 
       {/* 中奖结果（如果抽奖已结束） */}
       {renderWinners(lotteryInfo, isLotteryEnded, handleImageError, handleManualRefresh)}
