@@ -1,4 +1,4 @@
-// client/src/pages/detail/renderUtils.js
+// client/src/pages/detail/renderUtils.js - 优化版
 import React from "react";
 import { View, Text, Image } from "@tarojs/components";
 
@@ -8,7 +8,8 @@ import { View, Text, Image } from "@tarojs/components";
 export const renderWinners = (
   lotteryInfo,
   isLotteryEnded,
-  handleImageError
+  handleImageError,
+  handleManualRefresh // 添加手动刷新函数
 ) => {
   if (!lotteryInfo) {
     return null;
@@ -17,9 +18,73 @@ export const renderWinners = (
   // 判断抽奖是否已结束
   const ended = isLotteryEnded(lotteryInfo.endTimeLocal || lotteryInfo.endTime);
 
-  if (!ended || !lotteryInfo.winners || lotteryInfo.winners.length === 0) {
-    console.log("无需显示中奖名单");
+  if (!ended) {
+    console.log("抽奖未结束，不显示中奖名单");
     return null;
+  }
+
+  // 处理已开奖但无人参与的情况
+  if (lotteryInfo.hasDrawn && lotteryInfo.noParticipants) {
+    return (
+      <View className="winners-section">
+        <Text className="section-title">开奖结果</Text>
+        <View className="no-winners-tip">
+          <Text className="no-winners-text">本次抽奖无人参与，无中奖者</Text>
+        </View>
+      </View>
+    );
+  }
+
+  // 判断participants是否为空
+  const hasParticipants =
+    lotteryInfo.participants && lotteryInfo.participants.length > 0;
+
+  // 处理未找到中奖者的情况
+  if (!lotteryInfo.winners || lotteryInfo.winners.length === 0) {
+    // 检查是否有参与者但尚未开奖
+    if (hasParticipants && !lotteryInfo.hasDrawn) {
+      return (
+        <View className="winners-section">
+          <Text className="section-title">开奖结果</Text>
+          <View className="no-winners-tip">
+            <Text className="no-winners-text">正在开奖中，请稍后查看结果</Text>
+            <View className="refresh-btn" onClick={handleManualRefresh}>
+              <Text className="refresh-text">点击刷新</Text>
+            </View>
+          </View>
+        </View>
+      );
+    }
+
+    // 已开奖但没有中奖信息（可能是数据问题）
+    if (lotteryInfo.hasDrawn) {
+      return (
+        <View className="winners-section">
+          <Text className="section-title">开奖结果</Text>
+          <View className="no-winners-tip">
+            <Text className="no-winners-text">
+              开奖已完成，系统未能找到中奖信息
+            </Text>
+            <View className="refresh-btn" onClick={handleManualRefresh}>
+              <Text className="refresh-text">点击刷新</Text>
+            </View>
+          </View>
+        </View>
+      );
+    }
+
+    // 已结束但未开奖状态
+    return (
+      <View className="winners-section">
+        <Text className="section-title">开奖结果</Text>
+        <View className="no-winners-tip">
+          <Text className="no-winners-text">抽奖已结束，正在等待系统开奖</Text>
+          <View className="refresh-btn" onClick={handleManualRefresh}>
+            <Text className="refresh-text">点击刷新</Text>
+          </View>
+        </View>
+      </View>
+    );
   }
 
   console.log("显示中奖名单, 人数:", lotteryInfo.winners.length);

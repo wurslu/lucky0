@@ -1,4 +1,4 @@
-// cloud/functions/getLotteryDetail/index.js - 完整版，修复时间问题
+// cloud/functions/getLotteryDetail/index.js - 完整优化版
 const cloud = require("wx-server-sdk");
 
 // 初始化云环境
@@ -207,11 +207,47 @@ exports.main = async (event, context) => {
 		// 判断抽奖是否已结束 - 使用时间工具函数
 		const isEnded = isTimeExpired(lottery.endTimeLocal || lottery.endTime);
 
-		// 获取中奖者信息 - 只有在抽奖已结束时才有效
+		// 获取中奖者信息 - 优化版，无需依赖isEnded标志
 		let winners = [];
-		if (isEnded && participantsWithUser.length > 0) {
-			winners = participantsWithUser.filter((p) => p.isWinner);
-			console.log("中奖者数量:", winners.length);
+		// 直接查询中奖者 - 使用hasDrawn字段或isWinner条件
+		if (participantsWithUser.length > 0) {
+			if (lottery.hasDrawn) {
+				// 方法1: 直接使用标记为已开奖的记录，查询所有中奖者
+				winners = participantsWithUser.filter((p) => p.isWinner);
+				console.log("通过isWinner过滤得到中奖者数量:", winners.length);
+			}
+
+			// 如果首次过滤没有找到中奖者，尝试通过数据库直接查询
+			if (winners.length === 0) {
+				try {
+					console.log("尝试直接查询中奖者");
+					const winnersResult = await participantCollection
+						.where({
+							lotteryId: id,
+							isWinner: true,
+						})
+						.get();
+
+					if (winnersResult.data && winnersResult.data.length > 0) {
+						// 找到中奖者，但可能需要填充用户信息
+						const winnerIds = winnersResult.data.map((w) => w._id);
+						console.log("通过数据库查询找到中奖者IDs:", winnerIds);
+
+						// 将找到的中奖者与现有用户信息合并
+						winners = winnersResult.data.map((winnerData) => {
+							// 查找匹配的用户信息
+							const participant = participantsWithUser.find(
+								(p) => p._id === winnerData._id
+							);
+							return participant || winnerData; // 如果找到匹配的参与者则使用，否则使用原始数据
+						});
+					}
+				} catch (error) {
+					console.error("直接查询中奖者失败:", error);
+				}
+			}
+
+			console.log("最终获取到的中奖者数量:", winners.length);
 		}
 
 		return {

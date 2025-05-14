@@ -1,4 +1,4 @@
-// cloud/functions/drawLottery/index.js - 移除status依赖的版本
+// cloud/functions/drawLottery/index.js - 完整优化版
 const cloud = require("wx-server-sdk");
 
 // 初始化云环境
@@ -61,7 +61,8 @@ exports.main = async (event, context) => {
 				})
 				.count();
 
-			if (winnersResult.total > 0) {
+			// 检查是否已经标记为已开奖
+			if (lottery.hasDrawn || winnersResult.total > 0) {
 				return {
 					success: false,
 					message: "该抽奖已经开奖，无法重复开奖",
@@ -112,10 +113,25 @@ exports.main = async (event, context) => {
 		const participants = participantsResult.data;
 		console.log("参与者数量:", participants.length);
 
+		// 重要修改：处理无人参与情况
 		if (participants.length === 0) {
+			// 标记抽奖已开奖但无人参与
+			await lotteryCollection.doc(id).update({
+				data: {
+					winnerCount: 0,
+					hasDrawn: true, // 新增字段，标记已开奖
+					noParticipants: true, // 新增字段，标记无人参与
+					updateTime: db.serverDate(),
+				},
+			});
+
 			return {
-				success: false,
-				message: "暂无人参与，无法开奖",
+				success: true,
+				message: "已开奖，但无人参与",
+				data: {
+					winnerCount: 0,
+					noParticipants: true,
+				},
 			};
 		}
 
@@ -148,13 +164,15 @@ exports.main = async (event, context) => {
 					});
 			}
 
-			// 记录开奖信息 - 添加winnerCount字段
+			// 记录开奖信息 - 添加hasDrawn和noParticipants字段
 			await transaction
 				.collection("lotteries")
 				.doc(id)
 				.update({
 					data: {
 						winnerCount,
+						hasDrawn: true,
+						noParticipants: false,
 						updateTime: db.serverDate(),
 					},
 				});

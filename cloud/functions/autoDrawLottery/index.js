@@ -1,4 +1,4 @@
-// cloud/functions/autoDrawLottery/index.js - 完整版，修复时间问题
+// cloud/functions/autoDrawLottery/index.js - 完整优化版
 const cloud = require("wx-server-sdk");
 
 // 初始化云环境
@@ -123,12 +123,20 @@ exports.main = async (event, context) => {
 
 				// 检查是否已经有中奖者（已经开过奖）
 				const alreadyDrawn = await hasWinners(lottery._id);
-				if (alreadyDrawn) {
-					console.log(`抽奖 ${lottery._id} 已经开过奖，跳过处理`);
+
+				// 新增检查：是否已经标记为无人参与但已开奖
+				const lotteryDetail = await lotteryCollection.doc(lottery._id).get();
+				const isAlreadyProcessed =
+					alreadyDrawn ||
+					(lotteryDetail.data.hasDrawn === true &&
+						lotteryDetail.data.noParticipants === true);
+
+				if (isAlreadyProcessed) {
+					console.log(`抽奖 ${lottery._id} 已处理，跳过处理`);
 					results.push({
 						lotteryId: lottery._id,
 						title: lottery.title,
-						message: "已经开过奖，跳过处理",
+						message: "已处理，跳过",
 					});
 					continue;
 				}
@@ -144,13 +152,24 @@ exports.main = async (event, context) => {
 				console.log(`参与者数量: ${participants.length}`);
 
 				if (participants.length === 0) {
-					// 无人参与，记录日志
-					console.log(`抽奖 ${lottery._id} 无人参与`);
+					// 无人参与情况处理 - 标记为已开奖但无中奖者
+					await lotteryCollection.doc(lottery._id).update({
+						data: {
+							winnerCount: 0,
+							hasDrawn: true,
+							noParticipants: true,
+							drawTime: db.serverDate(), // 添加开奖时间
+							updateTime: db.serverDate(),
+						},
+					});
+
+					console.log(`抽奖 ${lottery._id} 无人参与，已标记为已开奖`);
 					results.push({
 						lotteryId: lottery._id,
 						title: lottery.title,
-						message: "无人参与，无法开奖",
+						message: "已自动开奖，但无人参与",
 					});
+					successCount++;
 					continue;
 				}
 
@@ -187,13 +206,16 @@ exports.main = async (event, context) => {
 						console.log(`已更新 ${winnerIds.length} 个中奖者状态`);
 					}
 
-					// 设置中奖人数
+					// 设置中奖人数和抽奖状态
 					await transaction
 						.collection("lotteries")
 						.doc(lottery._id)
 						.update({
 							data: {
 								winnerCount: winnerCount,
+								hasDrawn: true,
+								noParticipants: false,
+								drawTime: db.serverDate(), // 添加开奖时间
 								updateTime: db.serverDate(),
 							},
 						});

@@ -1,4 +1,4 @@
-// client/src/pages/detail/timeHandler.js
+// client/src/pages/detail/timeHandler.js - 修正版
 import {
   formatChineseTime,
   getCountdownString,
@@ -15,7 +15,8 @@ export const startCountdownTimer = (
   setCountdown,
   initialLoadDoneRef,
   refreshingRef,
-  fetchLotteryDetail
+  fetchLotteryDetail,
+  lotteryId // 添加lotteryId参数
 ) => {
   // 清除可能存在的之前的定时器
   if (countdownTimer) {
@@ -55,13 +56,24 @@ export const startCountdownTimer = (
 
         // 设置延迟，确保不会立即刷新
         setTimeout(() => {
-          fetchLotteryDetail();
+          // 确保传入lotteryId作为参数
+          if (lotteryId) {
+            fetchLotteryDetail(lotteryId);
+          } else {
+            console.error("无法刷新抽奖详情：lotteryId为空");
+          }
 
           // 设置定时再次刷新一次，获取可能的开奖结果
           setTimeout(() => {
             console.log("再次尝试刷新以获取开奖结果");
             refreshingRef.current = false; // 重置刷新标志
-            fetchLotteryDetail();
+
+            // 确保传入lotteryId作为参数
+            if (lotteryId) {
+              fetchLotteryDetail(lotteryId);
+            } else {
+              console.error("无法刷新抽奖详情：lotteryId为空");
+            }
           }, 8000); // 8秒后再次刷新
         }, 3000);
       }
@@ -86,13 +98,24 @@ export const startCountdownTimer = (
 
         // 延迟几秒后再刷新，给自动开奖云函数时间执行
         setTimeout(() => {
-          fetchLotteryDetail();
+          // 确保传入lotteryId作为参数
+          if (lotteryId) {
+            fetchLotteryDetail(lotteryId);
+          } else {
+            console.error("无法刷新抽奖详情：lotteryId为空");
+          }
 
           // 5秒后再次刷新以获取最新开奖结果
           setTimeout(() => {
             console.log("再次尝试获取开奖结果");
             refreshingRef.current = false; // 重置刷新标志
-            fetchLotteryDetail();
+
+            // 确保传入lotteryId作为参数
+            if (lotteryId) {
+              fetchLotteryDetail(lotteryId);
+            } else {
+              console.error("无法刷新抽奖详情：lotteryId为空");
+            }
           }, 5000);
         }, 3000);
       }
