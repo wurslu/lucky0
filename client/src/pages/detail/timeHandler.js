@@ -1,4 +1,4 @@
-// client/src/pages/detail/timeHandler.js - 修复版
+// client/src/pages/detail/timeHandler.js - 修正版
 import {
   formatChineseTime,
   getCountdownString,
@@ -70,7 +70,7 @@ export const startCountdownTimer = (
 
             // 确保传入lotteryId作为参数
             if (lotteryId) {
-              fetchLotteryDetail(lotteryId, true); // 强制刷新
+              fetchLotteryDetail(lotteryId);
             } else {
               console.error("无法刷新抽奖详情：lotteryId为空");
             }
@@ -112,7 +112,7 @@ export const startCountdownTimer = (
 
             // 确保传入lotteryId作为参数
             if (lotteryId) {
-              fetchLotteryDetail(lotteryId, true); // 强制刷新
+              fetchLotteryDetail(lotteryId);
             } else {
               console.error("无法刷新抽奖详情：lotteryId为空");
             }

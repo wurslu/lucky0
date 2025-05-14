@@ -112,7 +112,7 @@ export function useDetail() {
       initialLoadDoneRef,
       refreshingRef,
       fetchLotteryDetail,
-      lotteryId // 传入当前的 lotteryId
+      lotteryId
     );
   };
 
