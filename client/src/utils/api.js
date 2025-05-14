@@ -1,3 +1,5 @@
+// client/src/utils/api.js - 修改版本，移除对status字段的引用
+
 // src/utils/api.js (云开发版)
 import Taro from "@tarojs/taro";
 
@@ -15,7 +17,7 @@ export const getWxLoginCode = async () => {
   }
 };
 
-// src/utils/api.js 中的 completeWxLogin 函数优化版
+// 完成微信登录
 export const completeWxLogin = async (userInfo) => {
   try {
     console.log("开始登录流程，用户信息:", userInfo);
@@ -46,7 +48,7 @@ export const completeWxLogin = async (userInfo) => {
   }
 };
 
-// 检查登录状态 - 云函数版本
+// 检查登录状态
 export const checkLoginStatus = async () => {
   const userInfo = Taro.getStorageSync("userInfo");
 
@@ -78,7 +80,7 @@ export const checkLoginStatus = async () => {
   }
 };
 
-// 获取用户信息 - 云函数版本
+// 获取用户信息
 export const getUserInfo = async () => {
   try {
     const { result } = await Taro.cloud.callFunction({
@@ -96,6 +98,7 @@ export const getUserInfo = async () => {
   }
 };
 
+// 获取抽奖列表
 export const getLotteryList = async (params = {}) => {
   console.log("调用getLotteryList API，参数:", params);
   try {
@@ -117,6 +120,23 @@ export const getLotteryList = async (params = {}) => {
       throw new Error(result.message || "获取抽奖列表失败");
     }
 
+    // 对抽奖列表进行处理，判断是否已结束（基于时间）
+    if (
+      result.data &&
+      result.data.lotteries &&
+      result.data.lotteries.length > 0
+    ) {
+      const now = new Date();
+      result.data.lotteries = result.data.lotteries.map((lottery) => {
+        const endTime = new Date(lottery.endTimeLocal || lottery.endTime);
+        const isEnded = now >= endTime;
+        return {
+          ...lottery,
+          isEnded: isEnded,
+        };
+      });
+    }
+
     return result;
   } catch (error) {
     console.error("getLotteryList调用失败:", error);
@@ -124,7 +144,7 @@ export const getLotteryList = async (params = {}) => {
   }
 };
 
-// src/utils/api.js 中 getLotteryDetail 函数修改
+// 获取抽奖详情
 export const getLotteryDetail = async (id) => {
   try {
     console.log("调用getLotteryDetail API，参数ID:", id);
@@ -151,7 +171,7 @@ export const getLotteryDetail = async (id) => {
   }
 };
 
-// src/utils/api.js 中的 createLottery 函数优化版
+// 创建抽奖
 export const createLottery = async (data) => {
   try {
     console.log("开始调用创建抽奖云函数，参数:", data);
@@ -180,7 +200,7 @@ export const createLottery = async (data) => {
   }
 };
 
-// 参与抽奖 - 云函数版本
+// 参与抽奖
 export const joinLottery = async (lotteryId) => {
   try {
     const { result } = await Taro.cloud.callFunction({
@@ -199,7 +219,7 @@ export const joinLottery = async (lotteryId) => {
   }
 };
 
-// 手动开奖 - 云函数版本
+// 手动开奖
 export const drawLottery = async (id) => {
   try {
     const { result } = await Taro.cloud.callFunction({

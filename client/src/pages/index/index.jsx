@@ -1,4 +1,4 @@
-// src/pages/index/index.jsx (完整修改版)
+// client/src/pages/index/index.jsx - 修改版，移除status依赖
 import React, { useState, useEffect } from 'react';
 import Taro from '@tarojs/taro';
 import { View, Text, Button, Image, ScrollView } from '@tarojs/components';
@@ -19,30 +19,6 @@ const Index = () => {
   const [hasMore, setHasMore] = useState(true);
   const [loginModalVisible, setLoginModalVisible] = useState(false);
 
-// src/pages/index/index.jsx 中的 useEffect 钩子修改
-useEffect(() => {
-  const params = Taro.getCurrentInstance().router.params;
-
-  if (params && params.lotteryId) {
-    // 如果有抽奖ID参数，直接跳转到抽奖详情页
-    Taro.navigateTo({
-      url: `/pages/detail/index?lotteryId=${params.lotteryId}`,
-    });
-  } else {
-    // 否则加载抽奖列表和检查登录状态
-    initializeApp();
-
-    // 添加: 自动检测登录状态，未登录则弹窗
-    const userInfo = Taro.getStorageSync('userInfo');
-    if (!userInfo) {
-      // 延迟一小段时间再显示登录弹窗，让页面先渲染完成
-      setTimeout(() => {
-        setLoginModalVisible(true);
-      }, 500);
-    }
-  }
-}, []);
-
   // 页面加载时检查是否有指定的抽奖ID和登录状态
   useEffect(() => {
     const params = Taro.getCurrentInstance().router.params;
@@ -55,6 +31,15 @@ useEffect(() => {
     } else {
       // 否则加载抽奖列表和检查登录状态
       initializeApp();
+
+      // 添加: 自动检测登录状态，未登录则弹窗
+      const userInfo = Taro.getStorageSync('userInfo');
+      if (!userInfo) {
+        // 延迟一小段时间再显示登录弹窗，让页面先渲染完成
+        setTimeout(() => {
+          setLoginModalVisible(true);
+        }, 500);
+      }
     }
   }, []);
 
@@ -163,6 +148,8 @@ useEffect(() => {
       fetchLotteryList(false);
     }
   };
+
+  // 跳转到抽奖详情页面
   const goToLotteryDetail = async (lotteryId) => {
     console.log("点击抽奖卡片，ID:", lotteryId);
 
@@ -300,63 +287,68 @@ useEffect(() => {
         onScrollToLower={loadMore}
       >
         {lotteryList.length > 0 ? (
-          lotteryList.map((lottery) => (
-            <View
-  key={lottery._id} // 使用 _id 作为 key
-  className='lottery-card'
-  onClick={() => goToLotteryDetail(lottery._id)}
-  data-id={lottery._id} // 添加数据属性
->
-              <View className='lottery-header'>
-                <Text className='lottery-title'>{lottery.title}</Text>
-                <View className='lottery-status'>
-                  {lottery.status === 0 ? (
-                    <Text className='status-tag ongoing'>进行中</Text>
-                  ) : (
-                    <Text className='status-tag ended'>已结束</Text>
-                  )}
-                </View>
-              </View>
+          lotteryList.map((lottery) => {
+            // 判断抽奖是否已结束 - 基于isEnded属性或时间比较
+            const isEnded = lottery.isEnded || new Date() >= new Date(lottery.endTimeLocal || lottery.endTime);
 
-              <View className='lottery-info'>
-                <View className='sponsor-info'>
-                  <Image
-                    className='sponsor-avatar'
-                    src={lottery.creator?.avatarUrl || 'https://mmbiz.qlogo.cn/mmbiz/icTdbqWNOwNRna42FI242Lcia07jQodd2FJGIYQfG0LAJGFxM4FbnQP6yfMxBgJ0F3YRqJCJ1aPAK2dQagdusBZg/0'}
-                    onError={handleImageError}
-                  />
-                  <Text className='sponsor-name'>
-                    {lottery.creator?.nickName || '管理员'}
-                    {lottery.creator?.isAdmin && <Text className='admin-badge'>管理员</Text>}
-                  </Text>
-                </View>
-
-                <View className='lottery-stats'>
-                  <View className='stat-item'>
-                    <Text className='stat-label'>奖品</Text>
-                    <Text className='stat-value'>{lottery.prizeCount}个</Text>
-                  </View>
-
-                  <View className='stat-item'>
-                    <Text className='stat-label'>开奖</Text>
-                    <Text className='stat-value'>
-  {new Date(lottery.endTimeLocal || lottery.endTime).toLocaleString('zh-CN', {
-    month: 'numeric',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).replace(/\//g, '/')}
-</Text>
+            return (
+              <View
+                key={lottery._id}
+                className='lottery-card'
+                onClick={() => goToLotteryDetail(lottery._id)}
+                data-id={lottery._id}
+              >
+                <View className='lottery-header'>
+                  <Text className='lottery-title'>{lottery.title}</Text>
+                  <View className='lottery-status'>
+                    {!isEnded ? (
+                      <Text className='status-tag ongoing'>进行中</Text>
+                    ) : (
+                      <Text className='status-tag ended'>已结束</Text>
+                    )}
                   </View>
                 </View>
-              </View>
 
-              <View className='lottery-footer'>
-                <Text className='join-text'>点击参与</Text>
-                <Text className='arrow-icon'>→</Text>
+                <View className='lottery-info'>
+                  <View className='sponsor-info'>
+                    <Image
+                      className='sponsor-avatar'
+                      src={lottery.creator?.avatarUrl || 'https://mmbiz.qlogo.cn/mmbiz/icTdbqWNOwNRna42FI242Lcia07jQodd2FJGIYQfG0LAJGFxM4FbnQP6yfMxBgJ0F3YRqJCJ1aPAK2dQagdusBZg/0'}
+                      onError={handleImageError}
+                    />
+                    <Text className='sponsor-name'>
+                      {lottery.creator?.nickName || '管理员'}
+                      {lottery.creator?.isAdmin && <Text className='admin-badge'>管理员</Text>}
+                    </Text>
+                  </View>
+
+                  <View className='lottery-stats'>
+                    <View className='stat-item'>
+                      <Text className='stat-label'>奖品</Text>
+                      <Text className='stat-value'>{lottery.prizeCount}个</Text>
+                    </View>
+
+                    <View className='stat-item'>
+                      <Text className='stat-label'>开奖</Text>
+                      <Text className='stat-value'>
+                        {new Date(lottery.endTimeLocal || lottery.endTime).toLocaleString('zh-CN', {
+                          month: 'numeric',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        }).replace(/\//g, '/')}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                <View className='lottery-footer'>
+                  <Text className='join-text'>点击参与</Text>
+                  <Text className='arrow-icon'>→</Text>
+                </View>
               </View>
-            </View>
-          ))
+            );
+          })
         ) : (
           <View className='empty-container'>
             <Text className='empty-text'>还没有抽奖活动</Text>

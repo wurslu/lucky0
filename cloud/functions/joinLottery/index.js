@@ -1,6 +1,4 @@
-// cloud/functions/joinLottery/index.js (完整修改版)
-// 云函数：参与抽奖
-
+// cloud/functions/joinLottery/index.js - 移除status依赖的版本
 const cloud = require("wx-server-sdk");
 
 // 初始化云环境
@@ -39,49 +37,14 @@ exports.main = async (event, context) => {
 
 		// 调试信息
 		console.log("抽奖信息:", lottery);
-		console.log("当前状态:", lottery.status);
-		console.log("状态类型:", typeof lottery.status);
 		console.log("结束时间:", lottery.endTime);
 		console.log("当前时间:", new Date());
 
-		// 如果状态是字符串格式，转换为数字格式并更新数据库
-		if (typeof lottery.status === "string") {
-			if (lottery.status === "active") {
-				lottery.status = 0;
-				await lotteryCollection.doc(lotteryId).update({
-					data: { status: 0 },
-				});
-				console.log("已修正状态格式: 'active' -> 0");
-			} else if (lottery.status === "completed") {
-				lottery.status = 1;
-				await lotteryCollection.doc(lotteryId).update({
-					data: { status: 1 },
-				});
-				console.log("已修正状态格式: 'completed' -> 1");
-			}
-		}
-
-		// 检查抽奖状态 - 只用数字格式判断
-		if (lottery.status !== 0) {
-			return {
-				success: false,
-				message: "该抽奖已结束，无法参与",
-			};
-		}
-
-		// 检查结束时间
-		const endTime = new Date(lottery.endTime);
+		// 检查结束时间 - 判断抽奖是否已结束
+		const endTime = new Date(lottery.endTimeLocal || lottery.endTime);
 		const now = new Date();
 
 		if (now > endTime) {
-			// 抽奖时间已过，自动更新状态为已结束
-			await lotteryCollection.doc(lotteryId).update({
-				data: {
-					status: 1, // 使用数字 1 表示已结束
-					updateTime: db.serverDate(),
-				},
-			});
-
 			return {
 				success: false,
 				message: "该抽奖已过期，无法参与",

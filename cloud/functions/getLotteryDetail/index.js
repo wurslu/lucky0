@@ -1,6 +1,4 @@
-// cloud/functions/getLotteryDetail/index.js (完整修改版)
-// 云函数：获取抽奖详情
-
+// cloud/functions/getLotteryDetail/index.js - 移除status依赖的版本
 const cloud = require("wx-server-sdk");
 
 // 初始化云环境
@@ -39,56 +37,6 @@ exports.main = async (event, context) => {
 
 		const lottery = lotteryResult.data;
 		console.log("抽奖原始信息:", lottery);
-
-		// 如果状态是字符串格式，转换为数字格式
-		if (typeof lottery.status === "string") {
-			if (lottery.status === "active") {
-				lottery.status = 0;
-
-				// 自动更新数据库中的状态为数字格式
-				await lotteryCollection.doc(id).update({
-					data: {
-						status: 0,
-					},
-				});
-				console.log("已自动修正状态格式: 'active' -> 0");
-			} else if (lottery.status === "completed") {
-				lottery.status = 1;
-
-				// 自动更新数据库中的状态为数字格式
-				await lotteryCollection.doc(id).update({
-					data: {
-						status: 1,
-					},
-				});
-				console.log("已自动修正状态格式: 'completed' -> 1");
-			}
-		}
-
-		// 检查是否需要自动更新状态（如果已过期但状态仍为进行中）
-		if (lottery.status === 0) {
-			const endTime = new Date(lottery.endTime);
-			const now = new Date();
-
-			console.log("当前时间:", now.toISOString());
-			console.log("开奖时间:", endTime.toISOString());
-			console.log("是否已过期:", now > endTime);
-
-			if (now > endTime) {
-				console.log("时间已过，自动更新状态为已结束");
-
-				// 更新状态为已结束
-				await lotteryCollection.doc(id).update({
-					data: {
-						status: 1, // 统一使用数字 1 表示已结束
-						updateTime: db.serverDate(),
-					},
-				});
-
-				// 更新返回的数据对象
-				lottery.status = 1;
-			}
-		}
 
 		// 处理时区问题 - 如果没有本地时间，创建一个
 		if (!lottery.endTimeLocal && lottery.endTime) {
@@ -176,9 +124,14 @@ exports.main = async (event, context) => {
 			};
 		});
 
-		// 获取中奖者信息
+		// 判断抽奖是否已结束 - 根据时间判断
+		const now = new Date();
+		const endTime = new Date(lottery.endTimeLocal || lottery.endTime);
+		const isEnded = now >= endTime;
+
+		// 获取中奖者信息 - 只有在抽奖已结束时才有效
 		let winners = [];
-		if (lottery.status === 1 && participantsWithUser.length > 0) {
+		if (isEnded && participantsWithUser.length > 0) {
 			winners = participantsWithUser.filter((p) => p.isWinner);
 			console.log("中奖者数量:", winners.length);
 		}
@@ -190,6 +143,7 @@ exports.main = async (event, context) => {
 				creator,
 				participants: participantsWithUser,
 				winners,
+				isEnded: isEnded, // 添加一个明确的标志表示抽奖是否已结束
 			},
 		};
 	} catch (error) {

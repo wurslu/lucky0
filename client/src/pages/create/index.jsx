@@ -1,4 +1,5 @@
-// src/pages/create/index.jsx (优化版)
+// 修改版 - 自动设置开始时间为当前时间的 Create 组件
+
 import React, { useState, useEffect } from 'react';
 import Taro from '@tarojs/taro';
 import {
@@ -9,8 +10,6 @@ import {
   Picker,
   Form,
   Textarea,
-  RadioGroup,
-  Radio,
 } from '@tarojs/components';
 import { createLottery } from '../../utils/api';
 import './index.scss';
@@ -40,18 +39,16 @@ const Create = () => {
     return { date, time };
   };
 
-  // 获取当前时间作为默认开始时间
+  // 获取当前时间
   const { date: currentDate, time: currentTime } = getCurrentDateTime();
 
   // 抽奖表单数据
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [startDate, setStartDate] = useState(currentDate);
-  const [startTime, setStartTime] = useState(currentTime);
   const [endDate, setEndDate] = useState(currentDate);
   const [endTime, setEndTime] = useState(currentTime);
   const [prizeCount, setPrizeCount] = useState('1');
-  const [quickTimeOption, setQuickTimeOption] = useState('custom'); // 快速时间选项
+  const [quickTimeOption, setQuickTimeOption] = useState('15min'); // 默认选择15分钟
 
   // 检查登录状态
   useEffect(() => {
@@ -123,11 +120,11 @@ const Create = () => {
     setEndTime(futureDateTime.time);
   };
 
-  // 验证开奖时间是否大于开始时间
+  // 验证开奖时间是否大于当前时间
   const isEndTimeValid = () => {
-    const startDateTime = new Date(`${startDate}T${startTime}:00`);
+    const now = new Date();
     const endDateTime = new Date(`${endDate}T${endTime}:00`);
-    return endDateTime > startDateTime;
+    return endDateTime > now;
   };
 
   // 返回上一页
@@ -153,9 +150,9 @@ const Create = () => {
       return;
     }
 
-    // 验证开奖时间必须大于开始时间
+    // 验证开奖时间必须大于当前时间
     if (!isEndTimeValid()) {
-      Taro.showToast({ title: '开奖时间必须大于开始时间', icon: 'none' });
+      Taro.showToast({ title: '开奖时间必须大于当前时间', icon: 'none' });
       return;
     }
 
@@ -185,8 +182,16 @@ const Create = () => {
     try {
       console.log("当前登录用户信息:", storedUserInfo);
 
+      // 获取当前最新时间作为开始时间
+      const now = new Date();
+      const startDate = now.toISOString().split('T')[0];
+      const startHours = String(now.getHours()).padStart(2, '0');
+      const startMinutes = String(now.getMinutes()).padStart(2, '0');
+      const startSeconds = String(now.getSeconds()).padStart(2, '0');
+      const startTime = `${startHours}:${startMinutes}:${startSeconds}`;
+
       // 整合开始和结束时间
-      const startDateTime = `${startDate}T${startTime}:00`;
+      const startDateTime = `${startDate}T${startTime}`;
       const endDateTime = `${endDate}T${endTime}:00`;
 
       // 调用云函数创建抽奖
@@ -247,6 +252,24 @@ const Create = () => {
     );
   }
 
+  // 计算当前时间到开奖时间的差值
+  const calculateTimeDifference = () => {
+    const now = new Date();
+    const end = new Date(`${endDate}T${endTime}:00`);
+
+    const diffMs = end - now;
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const diffHrs = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+
+    let result = '';
+    if (diffDays > 0) result += `${diffDays}天 `;
+    if (diffHrs > 0 || diffDays > 0) result += `${diffHrs}小时 `;
+    result += `${diffMins}分钟`;
+
+    return result;
+  };
+
   // 创建抽奖页面
   return (
     <View className='create-lottery-container'>
@@ -285,54 +308,10 @@ const Create = () => {
           </View>
 
           <View className='form-item'>
-            <Text className='form-label'>开始日期</Text>
-            <Picker
-              mode='date'
-              value={startDate}
-              start={currentDate}
-              onChange={(e) => {
-                setStartDate(e.detail.value);
-                // 如果选择了新的开始日期，并且结束日期早于此日期，则更新结束日期
-                const newStartDate = new Date(`${e.detail.value}T00:00:00`);
-                const currentEndDate = new Date(`${endDate}T00:00:00`);
-                if (currentEndDate < newStartDate) {
-                  setEndDate(e.detail.value);
-                }
-                setQuickTimeOption('custom'); // 切换到自定义模式
-              }}
-            >
-              <View className='form-picker'>
-                {startDate || '请选择开始日期'}
-              </View>
-            </Picker>
-          </View>
-
-          <View className='form-item'>
             <Text className='form-label'>开始时间</Text>
-            <Picker
-              mode='time'
-              value={startTime}
-              onChange={(e) => {
-                setStartTime(e.detail.value);
-                // 如果开始和结束是同一天，且新选择的开始时间晚于结束时间，则更新结束时间
-                if (startDate === endDate) {
-                  const newStartDateTime = new Date(`${startDate}T${e.detail.value}:00`);
-                  const currentEndDateTime = new Date(`${endDate}T${endTime}:00`);
-                  if (currentEndDateTime <= newStartDateTime) {
-                    // 设置结束时间为开始时间后15分钟
-                    const futureTime = new Date(newStartDateTime.getTime() + 15 * 60000);
-                    const hours = String(futureTime.getHours()).padStart(2, '0');
-                    const minutes = String(futureTime.getMinutes()).padStart(2, '0');
-                    setEndTime(`${hours}:${minutes}`);
-                  }
-                }
-                setQuickTimeOption('custom'); // 切换到自定义模式
-              }}
-            >
-              <View className='form-picker'>
-                {startTime || '请选择开始时间'}
-              </View>
-            </Picker>
+            <View className='start-time-info'>
+              <Text className='start-time-text'>抽奖将从创建成功后立即开始</Text>
+            </View>
           </View>
 
           <View className='form-item'>
@@ -382,7 +361,7 @@ const Create = () => {
             <Picker
               mode='date'
               value={endDate}
-              start={startDate || currentDate}
+              start={currentDate}
               onChange={(e) => {
                 setEndDate(e.detail.value);
                 setQuickTimeOption('custom'); // 切换到自定义模式
@@ -411,13 +390,13 @@ const Create = () => {
           </View>
 
           {/* 开奖时间提示 */}
-          {startDate && startTime && endDate && endTime && (
+          {endDate && endTime && (
             <View className='time-preview'>
               <Text className='time-preview-label'>开奖倒计时预览：</Text>
               <Text className='time-preview-value'>
                 {isEndTimeValid()
                   ? `${calculateTimeDifference()}`
-                  : '开奖时间必须大于开始时间'}
+                  : '开奖时间必须大于当前时间'}
               </Text>
             </View>
           )}
@@ -471,24 +450,6 @@ const Create = () => {
       </Form>
     </View>
   );
-
-  // 计算开始时间和结束时间的差值
-  function calculateTimeDifference() {
-    const start = new Date(`${startDate}T${startTime}:00`);
-    const end = new Date(`${endDate}T${endTime}:00`);
-
-    const diffMs = end - start;
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    const diffHrs = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-
-    let result = '';
-    if (diffDays > 0) result += `${diffDays}天 `;
-    if (diffHrs > 0 || diffDays > 0) result += `${diffHrs}小时 `;
-    result += `${diffMins}分钟`;
-
-    return result;
-  }
 };
 
 export default Create;

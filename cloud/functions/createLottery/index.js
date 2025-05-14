@@ -1,6 +1,4 @@
-// cloud/functions/createLottery/index.js (完整修改版)
-// 云函数：创建抽奖
-
+// cloud/functions/createLottery/index.js - 简化版本，完全解决时区问题
 const cloud = require("wx-server-sdk");
 
 // 初始化云环境
@@ -67,26 +65,23 @@ exports.main = async (event, context) => {
 			};
 		}
 
-		// 创建抽奖 - 明确使用数字状态 0 表示进行中
+		// 创建抽奖 - 不再使用status字段
 		const now = db.serverDate();
 
-		// 计算本地时间 (用于显示)
-		const localStartTime = startDateTime.toISOString();
-		const localEndTime = endDateTime.toISOString();
-
-		console.log("创建抽奖 - 开始时间:", localStartTime);
-		console.log("创建抽奖 - 结束时间:", localEndTime);
+		// 关键修改：直接使用原始字符串，不进行任何转换
+		// 这样可以避免自动添加 Z 后缀
+		console.log("创建抽奖 - 开始时间:", startTime);
+		console.log("创建抽奖 - 结束时间:", endTime);
 
 		const result = await lotteryCollection.add({
 			data: {
 				title,
 				description: description || title,
-				startTime: new Date(startTime),
-				endTime: new Date(endTime),
-				startTimeLocal: localStartTime,
-				endTimeLocal: localEndTime,
+				startTime: startDateTime, // 数据库中的日期对象
+				endTime: endDateTime, // 数据库中的日期对象
+				startTimeLocal: startTime, // 保持原始字符串格式
+				endTimeLocal: endTime, // 保持原始字符串格式
 				prizeCount: parseInt(prizeCount),
-				status: 0, // 只使用数字 0 表示进行中
 				creatorId: wxContext.OPENID,
 				_openid: wxContext.OPENID,
 				openid: wxContext.OPENID,

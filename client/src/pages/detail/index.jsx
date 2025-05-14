@@ -1,5 +1,5 @@
-// src/pages/detail/index.jsx (完整版含时区修复)
-import React, { useState, useEffect } from 'react';
+// client/src/pages/detail/index.jsx - 移除status依赖的完整版本
+import React, { useState, useEffect, useRef } from 'react';
 import Taro from '@tarojs/taro';
 import { View, Text, Button, Image } from '@tarojs/components';
 import {
@@ -13,6 +13,10 @@ import './index.scss';
 const Detail = () => {
   // 获取路由参数
   const [lotteryId, setLotteryId] = useState('');
+
+  // 使用 useRef 存储防止刷新的标志
+  const refreshingRef = useRef(false);
+  const initialLoadDoneRef = useRef(false);
 
   // 状态管理
   const [userInfo, setUserInfo] = useState(null);
@@ -60,9 +64,25 @@ const Detail = () => {
     };
   }, []);
 
+  // 判断抽奖是否已结束 - 仅基于时间判断，不使用status
+  const isLotteryEnded = (endTimeStr) => {
+    if (!endTimeStr) return false;
+
+    const endTime = new Date(endTimeStr);
+    const now = new Date();
+    return now >= endTime;
+  };
 
   // 获取抽奖详情 - 云函数版本
   const fetchLotteryDetail = async (id) => {
+    // 如果正在刷新中，则不重复获取
+    if (refreshingRef.current) {
+      console.log("已在刷新中，跳过此次请求");
+      return;
+    }
+
+    // 设置刷新标志
+    refreshingRef.current = true;
     setLoading(true);
     console.log("开始获取抽奖详情，ID:", id || lotteryId);
 
@@ -78,6 +98,7 @@ const Detail = () => {
         },
       });
       setLoading(false);
+      refreshingRef.current = false;
       return;
     }
 
@@ -86,6 +107,11 @@ const Detail = () => {
 
       if (result && result.success) {
         console.log('抽奖详情数据:', result.data);
+
+        // 标记初始加载完成
+        initialLoadDoneRef.current = true;
+
+        // 更新抽奖信息
         setLotteryInfo(result.data);
 
         // 检查当前用户是否是创建者
@@ -104,8 +130,21 @@ const Detail = () => {
           setJoined(hasJoined);
         }
 
-        // 设置倒计时
-        startCountdown(result.data.endTimeLocal || result.data.endTime);
+        // 判断抽奖是否已结束 - 仅基于时间判断
+        const endTime = result.data.endTimeLocal || result.data.endTime;
+        const ended = isLotteryEnded(endTime);
+
+        if (!ended) {
+          // 抽奖未结束，设置倒计时
+          startCountdown(endTime);
+        } else {
+          // 抽奖已结束，清除定时器
+          if (countdownTimer) {
+            clearInterval(countdownTimer);
+            setCountdownTimer(null);
+          }
+          setCountdown('00:00:00');
+        }
       } else {
         console.error("获取抽奖详情失败:", result?.message);
         Taro.showToast({
@@ -131,6 +170,11 @@ const Detail = () => {
       });
     } finally {
       setLoading(false);
+
+      // 3秒后重置刷新标志，允许下次刷新
+      setTimeout(() => {
+        refreshingRef.current = false;
+      }, 3000);
     }
   };
 
@@ -148,7 +192,6 @@ const Detail = () => {
 
       console.log('开始倒计时，当前时间:', now.toISOString());
       console.log('目标时间:', endTime.toISOString());
-      console.log('时区偏移(分钟):', endTime.getTimezoneOffset());
 
       // 检查日期是否有效
       if (isNaN(endTime.getTime())) {
@@ -157,16 +200,22 @@ const Detail = () => {
         return;
       }
 
-      // 如果结束时间已过，直接显示 00:00:00 并刷新抽奖信息
+      // 如果结束时间已过，直接显示00:00:00
       if (now >= endTime) {
         console.log('结束时间已过，显示零时间');
         setCountdown('00:00:00');
 
-        // 刷新抽奖信息，获取最新状态
-        setTimeout(() => {
-          fetchLotteryDetail();
-        }, 1000);
+        // 只刷新一次，避免重复刷新
+        if (initialLoadDoneRef.current && !refreshingRef.current) {
+          console.log('抽奖结束后首次刷新数据');
 
+          // 设置延迟，确保不会立即刷新
+          setTimeout(() => {
+            if (!refreshingRef.current) {
+              fetchLotteryDetail();
+            }
+          }, 3000);
+        }
         return;
       }
 
@@ -183,10 +232,12 @@ const Detail = () => {
           clearInterval(timer);
           console.log('倒计时结束，刷新数据');
 
-          // 刷新抽奖信息，获取最新状态
+          // 延迟几秒后再刷新
           setTimeout(() => {
-            fetchLotteryDetail();
-          }, 1000);
+            if (!refreshingRef.current) {
+              fetchLotteryDetail();
+            }
+          }, 3000);
         }
       }, 1000);
 
@@ -242,6 +293,15 @@ const Detail = () => {
       return;
     }
 
+    // 检查抽奖是否已结束
+    if (lotteryInfo && isLotteryEnded(lotteryInfo.endTimeLocal || lotteryInfo.endTime)) {
+      Taro.showToast({
+        title: '抽奖已结束，无法参与',
+        icon: 'none',
+      });
+      return;
+    }
+
     Taro.showLoading({ title: '参与中...' });
 
     try {
@@ -256,7 +316,8 @@ const Detail = () => {
           icon: 'success',
         });
 
-        // 刷新抽奖详情
+        // 重置刷新标志后刷新抽奖详情
+        refreshingRef.current = false;
         setTimeout(() => {
           fetchLotteryDetail();
         }, 1000);
@@ -299,13 +360,23 @@ const Detail = () => {
             const result = await drawLottery(lotteryId);
 
             if (result && result.success) {
+              // 清除倒计时定时器
+              if (countdownTimer) {
+                clearInterval(countdownTimer);
+                setCountdownTimer(null);
+              }
+
+              // 设置倒计时为0
+              setCountdown('00:00:00');
+
               Taro.hideLoading();
               Taro.showToast({
                 title: '开奖成功',
                 icon: 'success',
               });
 
-              // 刷新抽奖信息
+              // 重置刷新标志后刷新抽奖详情
+              refreshingRef.current = false;
               setTimeout(() => {
                 fetchLotteryDetail();
               }, 1000);
@@ -338,18 +409,39 @@ const Detail = () => {
     });
   };
 
-  // 计算倒计时
   const getCountdown = (endTimeStr) => {
     if (!endTimeStr) return '00:00:00';
 
     try {
-      const endTime = new Date(endTimeStr).getTime();
-      const now = new Date().getTime();
-      const diff = endTime - now;
-
       console.log('计算倒计时:');
-      console.log('当前时间:', new Date(now).toISOString());
-      console.log('结束时间:', new Date(endTime).toISOString());
+      console.log('原始结束时间字符串:', endTimeStr);
+
+      let endTime;
+
+      // 处理时区问题 - 移除Z后缀
+      if (endTimeStr.includes('Z')) {
+        // 如果包含Z，说明是UTC时间，需要转换为本地时间
+        const rawTimeStr = endTimeStr.replace('Z', ''); // 去掉Z后缀
+        console.log('处理后的时间字符串:', rawTimeStr);
+
+        // 创建不受时区影响的日期对象
+        const [datePart, timePart] = rawTimeStr.split('T');
+        const [year, month, day] = datePart.split('-').map(Number);
+        const [hours, minutes, seconds] = timePart.split(':').map(Number);
+
+        // 注意：月份需要减1，因为JS中月份从0开始
+        endTime = new Date(year, month - 1, day, hours, minutes, seconds || 0);
+      } else {
+        // 如果不包含Z，直接解析
+        endTime = new Date(endTimeStr);
+      }
+
+      const now = new Date();
+
+      console.log('当前时间:', now.toString());
+      console.log('结束时间:', endTime.toString());
+
+      const diff = endTime - now;
       console.log('时间差(毫秒):', diff);
 
       // 如果时间差为负数，表示已过期
@@ -384,20 +476,48 @@ const Detail = () => {
   // 调试功能 - 临时添加用于检查状态问题
   const debugLottery = async () => {
     try {
+      const isEnded = lotteryInfo ? isLotteryEnded(lotteryInfo.endTimeLocal || lotteryInfo.endTime) : false;
+
       console.log('当前抽奖信息:', lotteryInfo);
-      console.log('状态类型:', typeof lotteryInfo.status);
-      console.log('状态值:', lotteryInfo.status);
-      console.log('结束时间:', new Date(lotteryInfo.endTime));
-      console.log('本地结束时间:', lotteryInfo.endTimeLocal);
+      console.log('结束时间:', lotteryInfo ? new Date(lotteryInfo.endTime) : null);
+      console.log('本地结束时间:', lotteryInfo ? lotteryInfo.endTimeLocal : null);
       console.log('当前时间:', new Date());
+      console.log('是否已结束(基于时间):', isEnded);
+      console.log('刷新中标志:', refreshingRef.current);
+      console.log('初始加载完成标志:', initialLoadDoneRef.current);
 
       Taro.showModal({
         title: '调试信息',
-        content: `状态: ${lotteryInfo.status} (${typeof lotteryInfo.status})\n结束时间: ${lotteryInfo.endTime}\n本地结束时间: ${lotteryInfo.endTimeLocal || '无'}\n当前时间: ${new Date().toISOString()}`,
+        content: `结束时间: ${lotteryInfo ? lotteryInfo.endTime : 'null'}
+本地结束时间: ${lotteryInfo ? (lotteryInfo.endTimeLocal || '无') : 'null'}
+当前时间: ${new Date().toISOString()}
+是否已结束(基于时间): ${isEnded}
+刷新中标志: ${refreshingRef.current}
+初始加载完成: ${initialLoadDoneRef.current}`,
         showCancel: false
       });
     } catch (error) {
       console.error('调试失败:', error);
+    }
+  };
+
+  // 手动刷新按钮
+  const handleManualRefresh = () => {
+    if (!refreshingRef.current) {
+      Taro.showToast({
+        title: '正在刷新...',
+        icon: 'loading',
+        duration: 1000
+      });
+      refreshingRef.current = false; // 重置刷新标志
+      setTimeout(() => {
+        fetchLotteryDetail(); // 手动刷新
+      }, 1000);
+    } else {
+      Taro.showToast({
+        title: '刷新中，请稍候',
+        icon: 'none'
+      });
     }
   };
 
@@ -416,12 +536,10 @@ const Detail = () => {
       return null;
     }
 
-    console.log("渲染中奖名单, 状态:", lotteryInfo.status, "类型:", typeof lotteryInfo.status);
+    // 判断抽奖是否已结束
+    const ended = isLotteryEnded(lotteryInfo.endTimeLocal || lotteryInfo.endTime);
 
-    // 简化判断逻辑 - 统一使用数字状态 (1 表示已结束)
-    if (lotteryInfo.status !== 1 ||
-        !lotteryInfo.winners ||
-        lotteryInfo.winners.length === 0) {
+    if (!ended || !lotteryInfo.winners || lotteryInfo.winners.length === 0) {
       console.log("无需显示中奖名单");
       return null;
     }
@@ -460,8 +578,8 @@ const Detail = () => {
     );
   }
 
-  // 简化判断 - 统一使用数字状态 (0 表示进行中)
-  const isActive = lotteryInfo.status === 0;
+  // 判断抽奖是否正在进行中 - 仅基于时间判断
+  const isActive = !isLotteryEnded(lotteryInfo.endTimeLocal || lotteryInfo.endTime);
 
   return (
     <View className='lottery-detail-page'>
@@ -482,6 +600,16 @@ const Detail = () => {
         onClick={debugLottery}
       >
         调试
+      </Button>
+
+      {/* 刷新按钮 */}
+      <Button
+        size='mini'
+        type='default'
+        style={{position: 'absolute', top: '20px', right: '70px', fontSize: '10px', padding: '0 8px'}}
+        onClick={handleManualRefresh}
+      >
+        刷新
       </Button>
 
       {/* 抽奖信息 */}

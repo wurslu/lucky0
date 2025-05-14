@@ -1,6 +1,4 @@
-// cloud/functions/getLotteryList/index.js (简化版)
-// 云函数：获取抽奖列表
-
+// cloud/functions/getLotteryList/index.js - 移除status依赖的版本
 const cloud = require("wx-server-sdk");
 
 // 初始化云环境
@@ -16,21 +14,12 @@ const lotteryCollection = db.collection("lotteries");
 // 主函数
 exports.main = async (event, context) => {
 	console.log("getLotteryList函数被调用，参数:", event);
-	const { page = 1, limit = 10, status } = event;
+	const { page = 1, limit = 10 } = event;
 	const skip = (page - 1) * limit;
 
 	try {
-		// 构建查询条件
+		// 查询列表 - 不再使用status过滤，而是通过时间判断
 		let query = lotteryCollection;
-
-		// 如果指定了状态，则按状态过滤 - 只使用数字状态
-		if (status !== undefined) {
-			// 确保状态为数字类型
-			const numStatus = typeof status === "string" ? parseInt(status) : status;
-			query = query.where({
-				status: numStatus,
-			});
-		}
 
 		// 尝试获取总数
 		const countResult = await query.count();
@@ -77,12 +66,26 @@ exports.main = async (event, context) => {
 				creatorsMap[creator._openid] = creator;
 			});
 
-			// 组合数据
+			// 当前时间
+			const now = new Date();
+
+			// 组合数据，并添加isEnded标志
 			lotteriesWithCreator = lotteriesWithCreator.map((lottery) => {
-				const result = { ...lottery };
+				// 判断是否已结束 - 基于时间判断
+				const endTime = new Date(lottery.endTimeLocal || lottery.endTime);
+				const isEnded = now >= endTime;
+
+				// 构建返回结果
+				const result = {
+					...lottery,
+					isEnded, // 添加基于时间的结束标志
+				};
+
+				// 添加创建者信息
 				if (lottery.creatorId && creatorsMap[lottery.creatorId]) {
 					result.creator = creatorsMap[lottery.creatorId];
 				}
+
 				return result;
 			});
 		}

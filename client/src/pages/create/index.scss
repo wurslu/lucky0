@@ -280,3 +280,50 @@
     transform: scale(0.95);
   }
 }
+/* 添加到 index.scss 文件中的新样式 */
+
+/* 开始时间信息样式 */
+.start-time-info {
+  width: 100%;
+  padding: 12px 15px;
+  background-color: #f5f9ff;
+  border-radius: 8px;
+  border-left: 3px solid #4a90e2;
+}
+
+.start-time-text {
+  font-size: 14px;
+  color: #4a90e2;
+  line-height: 1.4;
+}
+
+/* 调整时间预览样式 */
+.time-preview {
+  background-color: #f9f9f9;
+  border-radius: 8px;
+  padding: 12px 15px;
+  margin-top: 15px;
+  border-left: 3px solid #07c160;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.time-preview-label {
+  font-size: 14px;
+  color: #666;
+}
+
+.time-preview-value {
+  font-size: 16px;
+  color: #07c160;
+  font-weight: bold;
+}
+
+/* 活跃状态的快速选项按钮 */
+.quick-time-option.active {
+  background-color: #07c160;
+  color: white;
+  font-weight: bold;
+  box-shadow: 0 2px 6px rgba(7, 193, 96, 0.3);
+}

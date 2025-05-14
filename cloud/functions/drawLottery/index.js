@@ -1,6 +1,4 @@
-// cloud/functions/drawLottery/index.js (完整修改版)
-// 云函数：开奖
-
+// cloud/functions/drawLottery/index.js - 移除status依赖的版本
 const cloud = require("wx-server-sdk");
 
 // 初始化云环境
@@ -49,29 +47,26 @@ exports.main = async (event, context) => {
 		const lottery = lotteryResult.data;
 		console.log("抽奖信息:", lottery);
 
-		// 如果状态是字符串格式，转换为数字格式并更新数据库
-		if (typeof lottery.status === "string") {
-			if (lottery.status === "active") {
-				lottery.status = 0;
-				await lotteryCollection.doc(id).update({
-					data: { status: 0 },
-				});
-				console.log("已修正状态格式: 'active' -> 0");
-			} else if (lottery.status === "completed") {
-				lottery.status = 1;
-				await lotteryCollection.doc(id).update({
-					data: { status: 1 },
-				});
-				console.log("已修正状态格式: 'completed' -> 1");
-			}
-		}
+		// 检查抽奖是否已经结束 - 通过时间判断
+		const now = new Date();
+		const endTime = new Date(lottery.endTimeLocal || lottery.endTime);
+		const isEnded = now >= endTime;
 
-		// 检查抽奖状态
-		if (lottery.status === 1) {
-			return {
-				success: false,
-				message: "该抽奖已结束",
-			};
+		if (isEnded) {
+			// 查询是否已经有中奖者 - 判断是否已经开过奖
+			const winnersResult = await participantCollection
+				.where({
+					lotteryId: id,
+					isWinner: true,
+				})
+				.count();
+
+			if (winnersResult.total > 0) {
+				return {
+					success: false,
+					message: "该抽奖已经开奖，无法重复开奖",
+				};
+			}
 		}
 
 		// 查询当前用户信息，检查是否有权限操作
@@ -138,19 +133,7 @@ exports.main = async (event, context) => {
 		const transaction = await db.startTransaction();
 
 		try {
-			// 1. 更新抽奖状态为已结束
-			await transaction
-				.collection("lotteries")
-				.doc(id)
-				.update({
-					data: {
-						status: 1, // 统一使用数字 1 表示已结束
-						updateTime: db.serverDate(),
-						winnerCount,
-					},
-				});
-
-			// 2. 更新中奖者状态
+			// 更新中奖者状态
 			if (winnerIds.length > 0) {
 				await transaction
 					.collection("participants")
@@ -164,6 +147,17 @@ exports.main = async (event, context) => {
 						},
 					});
 			}
+
+			// 记录开奖信息 - 添加winnerCount字段
+			await transaction
+				.collection("lotteries")
+				.doc(id)
+				.update({
+					data: {
+						winnerCount,
+						updateTime: db.serverDate(),
+					},
+				});
 
 			// 提交事务
 			await transaction.commit();
