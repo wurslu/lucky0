@@ -1,4 +1,4 @@
-// client/src/pages/index/index.jsx - 修改版，移除status依赖
+// client/src/pages/index/index.jsx - 完整版，修复时间问题
 import React, { useState, useEffect } from 'react';
 import Taro from '@tarojs/taro';
 import { View, Text, Button, Image, ScrollView } from '@tarojs/components';
@@ -7,6 +7,11 @@ import {
   getLotteryList,
   completeWxLogin,
 } from '../../utils/api';
+import {
+  formatShortChineseTime,
+  isTimeExpired,
+  normalizeTimeString
+} from '../../utils/timeUtils';
 import './index.scss';
 
 const Index = () => {
@@ -117,13 +122,28 @@ const Index = () => {
       const result = await getLotteryList(params);
 
       if (result.success) {
-        if (refresh) {
-          setLotteryList(result.data.lotteries);
-        } else {
-          setLotteryList([...lotteryList, ...result.data.lotteries]);
+        // 处理获取到的抽奖列表
+        let lotteries = result.data.lotteries;
+
+        // 手动处理每个抽奖的时间，判断是否已结束
+        if (lotteries && lotteries.length > 0) {
+          lotteries = lotteries.map(lottery => {
+            // 使用时间工具函数判断是否已结束
+            const isEnded = isTimeExpired(normalizeTimeString(lottery.endTimeLocal || lottery.endTime));
+            return {
+              ...lottery,
+              isEnded
+            };
+          });
         }
 
-        setHasMore(result.data.lotteries.length === 10);
+        if (refresh) {
+          setLotteryList(lotteries);
+        } else {
+          setLotteryList([...lotteryList, ...lotteries]);
+        }
+
+        setHasMore(lotteries.length === 10);
         setPage(refresh ? 2 : page + 1);
       } else {
         Taro.showToast({
@@ -288,8 +308,8 @@ const Index = () => {
       >
         {lotteryList.length > 0 ? (
           lotteryList.map((lottery) => {
-            // 判断抽奖是否已结束 - 基于isEnded属性或时间比较
-            const isEnded = lottery.isEnded || new Date() >= new Date(lottery.endTimeLocal || lottery.endTime);
+            // 使用预先计算好的isEnded标志
+            const isEnded = lottery.isEnded;
 
             return (
               <View
@@ -331,12 +351,7 @@ const Index = () => {
                     <View className='stat-item'>
                       <Text className='stat-label'>开奖</Text>
                       <Text className='stat-value'>
-                        {new Date(lottery.endTimeLocal || lottery.endTime).toLocaleString('zh-CN', {
-                          month: 'numeric',
-                          day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        }).replace(/\//g, '/')}
+                        {formatShortChineseTime(lottery.endTimeLocal || lottery.endTime)}
                       </Text>
                     </View>
                   </View>

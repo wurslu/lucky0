@@ -1,4 +1,4 @@
-// client/src/pages/detail/index.jsx - 移除status依赖的完整版本
+// client/src/pages/detail/index.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import Taro from '@tarojs/taro';
 import { View, Text, Button, Image } from '@tarojs/components';
@@ -8,6 +8,16 @@ import {
   drawLottery,
   completeWxLogin,
 } from '../../utils/api';
+import {
+  formatChineseTime,
+  formatShortChineseTime,
+  isTimeExpired,
+  getCountdownString,
+  normalizeTimeString
+} from '../../utils/timeUtils';
+import { startCountdownTimer } from './timeHandler';
+import { debugLottery, testAutoDrawLottery, testCurrentLotteryDraw } from './testUtils';
+import { renderWinners } from './renderUtils';
 import './index.scss';
 
 const Detail = () => {
@@ -22,6 +32,7 @@ const Detail = () => {
   const [userInfo, setUserInfo] = useState(null);
   const [joined, setJoined] = useState(false);
   const [isCreator, setIsCreator] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [lotteryInfo, setLotteryInfo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [countdown, setCountdown] = useState('00:00:00');
@@ -39,6 +50,7 @@ const Detail = () => {
       const userInfoStored = Taro.getStorageSync('userInfo');
       if (userInfoStored) {
         setUserInfo(userInfoStored);
+        setIsAdmin(userInfoStored.isAdmin || false);
       }
 
       // 获取抽奖详情
@@ -64,16 +76,26 @@ const Detail = () => {
     };
   }, []);
 
-  // 判断抽奖是否已结束 - 仅基于时间判断，不使用status
+  // 判断抽奖是否已结束 - 仅基于时间判断
   const isLotteryEnded = (endTimeStr) => {
     if (!endTimeStr) return false;
-
-    const endTime = new Date(endTimeStr);
-    const now = new Date();
-    return now >= endTime;
+    return isTimeExpired(normalizeTimeString(endTimeStr));
   };
 
-  // 获取抽奖详情 - 云函数版本
+  // 开始倒计时
+  const startCountdown = (endTimeStr) => {
+    return startCountdownTimer(
+      endTimeStr,
+      countdownTimer,
+      setCountdownTimer,
+      setCountdown,
+      initialLoadDoneRef,
+      refreshingRef,
+      fetchLotteryDetail
+    );
+  };
+
+  // 获取抽奖详情
   const fetchLotteryDetail = async (id) => {
     // 如果正在刷新中，则不重复获取
     if (refreshingRef.current) {
@@ -95,7 +117,7 @@ const Detail = () => {
           setTimeout(() => {
             Taro.navigateBack();
           }, 1500);
-        },
+        }
       });
       setLoading(false);
       refreshingRef.current = false;
@@ -130,9 +152,9 @@ const Detail = () => {
           setJoined(hasJoined);
         }
 
-        // 判断抽奖是否已结束 - 仅基于时间判断
+        // 使用修正后的时间工具判断抽奖是否已结束
         const endTime = result.data.endTimeLocal || result.data.endTime;
-        const ended = isLotteryEnded(endTime);
+        const ended = isTimeExpired(normalizeTimeString(endTime));
 
         if (!ended) {
           // 抽奖未结束，设置倒计时
@@ -178,76 +200,6 @@ const Detail = () => {
     }
   };
 
-  // 开始倒计时
-  const startCountdown = (endTimeStr) => {
-    // 清除可能存在的之前的定时器
-    if (countdownTimer) {
-      clearInterval(countdownTimer);
-    }
-
-    try {
-      // 首先验证结束时间是否有效
-      const endTime = new Date(endTimeStr);
-      const now = new Date();
-
-      console.log('开始倒计时，当前时间:', now.toISOString());
-      console.log('目标时间:', endTime.toISOString());
-
-      // 检查日期是否有效
-      if (isNaN(endTime.getTime())) {
-        console.error('无效的结束时间:', endTimeStr);
-        setCountdown('无效的时间');
-        return;
-      }
-
-      // 如果结束时间已过，直接显示00:00:00
-      if (now >= endTime) {
-        console.log('结束时间已过，显示零时间');
-        setCountdown('00:00:00');
-
-        // 只刷新一次，避免重复刷新
-        if (initialLoadDoneRef.current && !refreshingRef.current) {
-          console.log('抽奖结束后首次刷新数据');
-
-          // 设置延迟，确保不会立即刷新
-          setTimeout(() => {
-            if (!refreshingRef.current) {
-              fetchLotteryDetail();
-            }
-          }, 3000);
-        }
-        return;
-      }
-
-      // 计算并设置初始倒计时
-      setCountdown(getCountdown(endTimeStr));
-
-      // 设置新的定时器 - 每秒更新一次
-      const timer = setInterval(() => {
-        const countdown = getCountdown(endTimeStr);
-        setCountdown(countdown);
-
-        // 如果倒计时结束，清除定时器并刷新数据
-        if (countdown === '00:00:00') {
-          clearInterval(timer);
-          console.log('倒计时结束，刷新数据');
-
-          // 延迟几秒后再刷新
-          setTimeout(() => {
-            if (!refreshingRef.current) {
-              fetchLotteryDetail();
-            }
-          }, 3000);
-        }
-      }, 1000);
-
-      setCountdownTimer(timer);
-    } catch (error) {
-      console.error('启动倒计时出错:', error);
-      setCountdown('计时错误');
-    }
-  };
-
   // 处理微信登录并参与抽奖 - 云函数版本
   const handleLoginAndJoin = async () => {
     try {
@@ -263,6 +215,7 @@ const Detail = () => {
 
       // 更新本地状态
       setUserInfo(result.user);
+      setIsAdmin(result.user?.isAdmin || false);
 
       Taro.hideLoading();
       Taro.showToast({
@@ -409,60 +362,6 @@ const Detail = () => {
     });
   };
 
-  const getCountdown = (endTimeStr) => {
-    if (!endTimeStr) return '00:00:00';
-
-    try {
-      console.log('计算倒计时:');
-      console.log('原始结束时间字符串:', endTimeStr);
-
-      let endTime;
-
-      // 处理时区问题 - 移除Z后缀
-      if (endTimeStr.includes('Z')) {
-        // 如果包含Z，说明是UTC时间，需要转换为本地时间
-        const rawTimeStr = endTimeStr.replace('Z', ''); // 去掉Z后缀
-        console.log('处理后的时间字符串:', rawTimeStr);
-
-        // 创建不受时区影响的日期对象
-        const [datePart, timePart] = rawTimeStr.split('T');
-        const [year, month, day] = datePart.split('-').map(Number);
-        const [hours, minutes, seconds] = timePart.split(':').map(Number);
-
-        // 注意：月份需要减1，因为JS中月份从0开始
-        endTime = new Date(year, month - 1, day, hours, minutes, seconds || 0);
-      } else {
-        // 如果不包含Z，直接解析
-        endTime = new Date(endTimeStr);
-      }
-
-      const now = new Date();
-
-      console.log('当前时间:', now.toString());
-      console.log('结束时间:', endTime.toString());
-
-      const diff = endTime - now;
-      console.log('时间差(毫秒):', diff);
-
-      // 如果时间差为负数，表示已过期
-      if (diff <= 0) return '00:00:00';
-
-      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-
-      return `${days > 0 ? `${days}天 ` : ''}${hours
-        .toString()
-        .padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds
-        .toString()
-        .padStart(2, '0')}`;
-    } catch (error) {
-      console.error('计算倒计时出错:', error, '时间字符串:', endTimeStr);
-      return '00:00:00'; // 出错时返回零时间
-    }
-  };
-
   // 返回首页
   const goBack = () => {
     Taro.navigateBack();
@@ -471,34 +370,6 @@ const Detail = () => {
   // 处理图片加载错误
   const handleImageError = (e) => {
     e.target.src = 'https://mmbiz.qlogo.cn/mmbiz/icTdbqWNOwNRna42FI242Lcia07jQodd2FJGIYQfG0LAJGFxM4FbnQP6yfMxBgJ0F3YRqJCJ1aPAK2dQagdusBZg/0';
-  };
-
-  // 调试功能 - 临时添加用于检查状态问题
-  const debugLottery = async () => {
-    try {
-      const isEnded = lotteryInfo ? isLotteryEnded(lotteryInfo.endTimeLocal || lotteryInfo.endTime) : false;
-
-      console.log('当前抽奖信息:', lotteryInfo);
-      console.log('结束时间:', lotteryInfo ? new Date(lotteryInfo.endTime) : null);
-      console.log('本地结束时间:', lotteryInfo ? lotteryInfo.endTimeLocal : null);
-      console.log('当前时间:', new Date());
-      console.log('是否已结束(基于时间):', isEnded);
-      console.log('刷新中标志:', refreshingRef.current);
-      console.log('初始加载完成标志:', initialLoadDoneRef.current);
-
-      Taro.showModal({
-        title: '调试信息',
-        content: `结束时间: ${lotteryInfo ? lotteryInfo.endTime : 'null'}
-本地结束时间: ${lotteryInfo ? (lotteryInfo.endTimeLocal || '无') : 'null'}
-当前时间: ${new Date().toISOString()}
-是否已结束(基于时间): ${isEnded}
-刷新中标志: ${refreshingRef.current}
-初始加载完成: ${initialLoadDoneRef.current}`,
-        showCancel: false
-      });
-    } catch (error) {
-      console.error('调试失败:', error);
-    }
   };
 
   // 手动刷新按钮
@@ -530,43 +401,6 @@ const Detail = () => {
     );
   }
 
-  // 渲染中奖结果（如果抽奖已结束）
-  const renderWinners = () => {
-    if (!lotteryInfo) {
-      return null;
-    }
-
-    // 判断抽奖是否已结束
-    const ended = isLotteryEnded(lotteryInfo.endTimeLocal || lotteryInfo.endTime);
-
-    if (!ended || !lotteryInfo.winners || lotteryInfo.winners.length === 0) {
-      console.log("无需显示中奖名单");
-      return null;
-    }
-
-    console.log("显示中奖名单, 人数:", lotteryInfo.winners.length);
-
-    return (
-      <View className='winners-section'>
-        <Text className='section-title'>中奖名单</Text>
-        <View className='winners-list'>
-          {lotteryInfo.winners.map((winner, index) => (
-            <View key={index} className='winner-item'>
-              <Image
-                className='winner-avatar'
-                src={winner.avatarUrl || 'https://mmbiz.qlogo.cn/mmbiz/icTdbqWNOwNRna42FI242Lcia07jQodd2FJGIYQfG0LAJGFxM4FbnQP6yfMxBgJ0F3YRqJCJ1aPAK2dQagdusBZg/0'}
-                onError={handleImageError}
-              />
-              <Text className='winner-name'>
-                {winner.nickName || '幸运用户'}
-              </Text>
-            </View>
-          ))}
-        </View>
-      </View>
-    );
-  };
-
   if (!lotteryInfo) {
     return (
       <View className='error-container'>
@@ -597,9 +431,31 @@ const Detail = () => {
         size='mini'
         type='default'
         style={{position: 'absolute', top: '20px', right: '20px', fontSize: '10px', padding: '0 8px'}}
-        onClick={debugLottery}
+        onClick={() => debugLottery(lotteryInfo, initialLoadDoneRef, refreshingRef, countdown)}
       >
         调试
+      </Button>
+
+      {/* 测试自动开奖按钮 */}
+      {isAdmin && (
+        <Button
+          size='mini'
+          type='primary'
+          style={{position: 'absolute', top: '20px', right: '230px', fontSize: '10px', padding: '0 8px'}}
+          onClick={() => testAutoDrawLottery(lotteryId, refreshingRef, fetchLotteryDetail)}
+        >
+          测试自动开奖
+        </Button>
+      )}
+
+      {/* 测试当前抽奖开奖按钮 */}
+      <Button
+        size='mini'
+        type='primary'
+        style={{position: 'absolute', top: '20px', right: '120px', fontSize: '10px', padding: '0 8px'}}
+        onClick={() => testCurrentLotteryDraw(lotteryId, refreshingRef, fetchLotteryDetail)}
+      >
+        测试本抽奖
       </Button>
 
       {/* 刷新按钮 */}
@@ -667,12 +523,7 @@ const Detail = () => {
               <Text className='status-value countdown'>
                 {isActive
                   ? countdown
-                  : new Date(lotteryInfo.endTimeLocal || lotteryInfo.endTime).toLocaleString('zh-CN', {
-                      month: 'numeric',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
+                  : formatShortChineseTime(lotteryInfo.endTimeLocal || lotteryInfo.endTime)}
               </Text>
             </View>
           </View>
@@ -680,7 +531,7 @@ const Detail = () => {
       </View>
 
       {/* 中奖结果（如果抽奖已结束） */}
-      {renderWinners()}
+      {renderWinners(lotteryInfo, isLotteryEnded, handleImageError)}
 
       {/* 参与按钮 */}
       {isActive && (
@@ -690,12 +541,7 @@ const Detail = () => {
               <Text className='joined-text'>已成功参与抽奖</Text>
               <Text className='joined-tips'>
                 开奖结果将在{' '}
-                {new Date(lotteryInfo.endTimeLocal || lotteryInfo.endTime).toLocaleString('zh-CN', {
-                  month: 'numeric',
-                  day: 'numeric',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}{' '}
+                {formatShortChineseTime(lotteryInfo.endTimeLocal || lotteryInfo.endTime)}{' '}
                 公布
               </Text>
               <Button className='share-btn' onClick={handleShare}>
@@ -725,13 +571,7 @@ const Detail = () => {
         <Text className='rule-item'>1. 每人只能参与一次抽奖</Text>
         <Text className='rule-item'>
           2. 系统将于{' '}
-          {new Date(lotteryInfo.endTimeLocal || lotteryInfo.endTime).toLocaleString('zh-CN', {
-            year: 'numeric',
-            month: 'numeric',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-          })}{' '}
+          {formatChineseTime(lotteryInfo.endTimeLocal || lotteryInfo.endTime)}{' '}
           自动开奖
         </Text>
         <Text className='rule-item'>3. 中奖者将显示在中奖名单中</Text>

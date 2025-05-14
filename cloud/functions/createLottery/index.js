@@ -1,4 +1,4 @@
-// cloud/functions/createLottery/index.js - 简化版本，完全解决时区问题
+// cloud/functions/createLottery/index.js - 完整版，修复时间问题
 const cloud = require("wx-server-sdk");
 
 // 初始化云环境
@@ -9,6 +9,40 @@ cloud.init({
 const db = cloud.database();
 const lotteryCollection = db.collection("lotteries");
 const userCollection = db.collection("users");
+
+/**
+ * 标准化时间字符串，处理可能的时区问题
+ * @param {string} timeStr 时间字符串
+ * @returns {string} 标准化后的时间字符串
+ */
+function normalizeTimeString(timeStr) {
+	if (!timeStr) return "";
+
+	try {
+		// 如果包含Z后缀，移除它以避免时区问题
+		if (typeof timeStr === "string" && timeStr.includes("Z")) {
+			return timeStr.replace("Z", "");
+		}
+		return timeStr;
+	} catch (error) {
+		console.error("标准化时间字符串出错:", error);
+		return timeStr;
+	}
+}
+
+/**
+ * 获取当前标准时间字符串（不带Z后缀）
+ * @returns {string} 当前时间的标准字符串
+ */
+function getCurrentStandardTime() {
+	try {
+		const now = new Date();
+		return now.toISOString().replace("Z", "");
+	} catch (error) {
+		console.error("获取当前标准时间出错:", error);
+		return new Date().toISOString();
+	}
+}
 
 // 主函数
 exports.main = async (event, context) => {
@@ -28,9 +62,22 @@ exports.main = async (event, context) => {
 		return { success: false, message: "奖品数量至少为1" };
 	}
 
+	// 规范化时间字符串，确保没有时区问题
+	const normalizedStartTime = normalizeTimeString(
+		startTime || getCurrentStandardTime()
+	);
+	const normalizedEndTime = normalizeTimeString(endTime);
+
+	console.log("规范化后的开始时间:", normalizedStartTime);
+	console.log("规范化后的结束时间:", normalizedEndTime);
+
 	// 验证开奖时间必须大于开始时间
-	const startDateTime = new Date(startTime);
-	const endDateTime = new Date(endTime);
+	const startDateTime = new Date(normalizedStartTime);
+	const endDateTime = new Date(normalizedEndTime);
+
+	console.log("开始时间Date:", startDateTime);
+	console.log("结束时间Date:", endDateTime);
+
 	if (endDateTime <= startDateTime) {
 		return { success: false, message: "开奖时间必须大于开始时间" };
 	}
@@ -65,22 +112,19 @@ exports.main = async (event, context) => {
 			};
 		}
 
-		// 创建抽奖 - 不再使用status字段
+		// 创建抽奖
 		const now = db.serverDate();
-
-		// 关键修改：直接使用原始字符串，不进行任何转换
-		// 这样可以避免自动添加 Z 后缀
-		console.log("创建抽奖 - 开始时间:", startTime);
-		console.log("创建抽奖 - 结束时间:", endTime);
 
 		const result = await lotteryCollection.add({
 			data: {
 				title,
 				description: description || title,
-				startTime: startDateTime, // 数据库中的日期对象
-				endTime: endDateTime, // 数据库中的日期对象
-				startTimeLocal: startTime, // 保持原始字符串格式
-				endTimeLocal: endTime, // 保持原始字符串格式
+				// 存储原始时间字符串，避免Date对象自动转换为UTC
+				startTimeLocal: normalizedStartTime,
+				endTimeLocal: normalizedEndTime,
+				// 也存储Date对象用于查询
+				startTime: startDateTime,
+				endTime: endDateTime,
 				prizeCount: parseInt(prizeCount),
 				creatorId: wxContext.OPENID,
 				_openid: wxContext.OPENID,
@@ -101,7 +145,7 @@ exports.main = async (event, context) => {
 		console.error("创建抽奖失败", error);
 		return {
 			success: false,
-			message: "创建抽奖失败，请重试: " + error.message,
+			message: "创建抽奖失败，请重试: " + (error.message || "未知错误"),
 			error,
 		};
 	}

@@ -13,6 +13,13 @@ import {
 } from '@tarojs/components';
 import { createLottery } from '../../utils/api';
 import './index.scss';
+import {
+  getCurrentISOString,
+  getFutureDateTime,
+  combineDateTimeToISO,
+  isTimeExpired
+} from '../../utils/timeUtils';
+
 
 const Create = () => {
   // 状态管理
@@ -150,8 +157,9 @@ const Create = () => {
       return;
     }
 
-    // 验证开奖时间必须大于当前时间
-    if (!isEndTimeValid()) {
+    // 使用新的时间工具验证开奖时间 - 确保结束时间大于当前时间
+    const endDateTime = combineDateTimeToISO(endDate, endTime);
+    if (isTimeExpired(endDateTime)) {
       Taro.showToast({ title: '开奖时间必须大于当前时间', icon: 'none' });
       return;
     }
@@ -182,17 +190,14 @@ const Create = () => {
     try {
       console.log("当前登录用户信息:", storedUserInfo);
 
-      // 获取当前最新时间作为开始时间
-      const now = new Date();
-      const startDate = now.toISOString().split('T')[0];
-      const startHours = String(now.getHours()).padStart(2, '0');
-      const startMinutes = String(now.getMinutes()).padStart(2, '0');
-      const startSeconds = String(now.getSeconds()).padStart(2, '0');
-      const startTime = `${startHours}:${startMinutes}:${startSeconds}`;
+      // 使用新的时间工具获取当前时间作为开始时间
+      const startDateTime = getCurrentISOString();
 
-      // 整合开始和结束时间
-      const startDateTime = `${startDate}T${startTime}`;
-      const endDateTime = `${endDate}T${endTime}:00`;
+      // 组合开始和结束时间 - 确保不带Z后缀
+      const endDateTime = combineDateTimeToISO(endDate, endTime);
+
+      console.log("开始时间:", startDateTime);
+      console.log("结束时间:", endDateTime);
 
       // 调用云函数创建抽奖
       const lotteryData = {
@@ -200,8 +205,7 @@ const Create = () => {
         description: description || title,
         startTime: startDateTime,
         endTime: endDateTime,
-        prizeCount: parseInt(prizeCount),
-        status: 0  // 0表示进行中
+        prizeCount: parseInt(prizeCount)
       };
 
       console.log("准备创建抽奖，数据:", lotteryData);
@@ -219,7 +223,7 @@ const Create = () => {
             // 跳转到抽奖详情页
             setTimeout(() => {
               Taro.navigateTo({
-                url: `/pages/detail/index?lotteryId=${result.data._id}`, // 云开发使用_id
+                url: `/pages/detail/index?lotteryId=${result.data._id}`,
               });
             }, 2000);
           },

@@ -1,0 +1,10 @@
+{
+	"name": "autoDrawLottery",
+	"triggers": [
+		{
+			"name": "autoDrawTrigger",
+			"type": "timer",
+			"config": "*/10 * * * * * *"
+		}
+	]
+}
