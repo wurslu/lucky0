@@ -1,10 +1,7 @@
 // client/src/pages/detail/testUtils.js
+// 创建缺失的 testUtils.js 文件
 import Taro from "@tarojs/taro";
-import {
-  formatChineseTime,
-  normalizeTimeString,
-  isTimeExpired,
-} from "../../utils/timeUtils";
+import { formatChineseTime } from "../../utils/timeUtils";
 
 /**
  * 调试功能 - 显示当前抽奖时间和状态信息
@@ -16,16 +13,14 @@ export const debugLottery = async (
   countdown
 ) => {
   try {
-    const normalizedEndTime = normalizeTimeString(
-      lotteryInfo ? lotteryInfo.endTimeLocal || lotteryInfo.endTime : null
-    );
-    const isEnded = lotteryInfo ? isTimeExpired(normalizedEndTime) : false;
+    const isEnded = lotteryInfo
+      ? new Date() >= new Date(lotteryInfo.endTime)
+      : false;
     const now = new Date();
 
     console.log("当前抽奖信息:", lotteryInfo);
     console.log("原始结束时间:", lotteryInfo ? lotteryInfo.endTime : null);
     console.log("本地结束时间:", lotteryInfo ? lotteryInfo.endTimeLocal : null);
-    console.log("标准化结束时间:", normalizedEndTime);
     console.log("当前时间:", formatChineseTime(now));
     console.log("当前时间ISO:", now.toISOString());
     console.log("是否已结束(基于时间):", isEnded);
@@ -36,7 +31,6 @@ export const debugLottery = async (
       title: "时间调试信息",
       content: `原始结束时间: ${lotteryInfo ? lotteryInfo.endTime : "null"}
 本地结束时间: ${lotteryInfo ? lotteryInfo.endTimeLocal || "无" : "null"}
-标准化结束时间: ${normalizedEndTime}
 当前时间: ${formatChineseTime(now)}
 ISO当前时间: ${now.toISOString()}
 是否已结束: ${isEnded}

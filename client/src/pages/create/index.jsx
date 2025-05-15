@@ -1,5 +1,4 @@
-// 修改版 - 自动设置开始时间为当前时间的 Create 组件
-
+// src/pages/create/index.jsx - Simplified version with simpler time handling
 import React, { useState, useEffect } from 'react';
 import Taro from '@tarojs/taro';
 import {
@@ -12,23 +11,30 @@ import {
   Textarea,
 } from '@tarojs/components';
 import { createLottery } from '../../utils/api';
+import {
+  formatTime,
+  getFutureDateTime,
+  combineDateTime,
+  formatChineseTime
+} from '../../utils/timeUtils';
 import './index.scss';
 
 const Create = () => {
-  // 状态管理
+  // State management
   const [loading, setLoading] = useState(false);
   const [userInfo, setUserInfo] = useState(null);
 
+  // Get current date and time
   const getCurrentDateTime = () => {
     const now = new Date();
 
-    // 获取日期部分：YYYY-MM-DD
+    // Get date part: YYYY-MM-DD
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const day = String(now.getDate()).padStart(2, '0');
     const date = `${year}-${month}-${day}`;
 
-    // 获取时间部分：HH:MM
+    // Get time part: HH:MM
     const hours = String(now.getHours()).padStart(2, '0');
     const minutes = String(now.getMinutes()).padStart(2, '0');
     const time = `${hours}:${minutes}`;
@@ -36,46 +42,28 @@ const Create = () => {
     return { date, time };
   };
 
-
-  const getFutureDateTime = (minutesToAdd) => {
-    const futureTime = new Date(Date.now() + minutesToAdd * 60000);
-
-    // 获取日期部分
-    const year = futureTime.getFullYear();
-    const month = String(futureTime.getMonth() + 1).padStart(2, '0');
-    const day = String(futureTime.getDate()).padStart(2, '0');
-    const date = `${year}-${month}-${day}`;
-
-    // 获取时间部分
-    const hours = String(futureTime.getHours()).padStart(2, '0');
-    const minutes = String(futureTime.getMinutes()).padStart(2, '0');
-    const time = `${hours}:${minutes}`;
-
-    return { date, time };
-  };
-
-  // 获取当前时间
+  // Get current date and time
   const { date: currentDate, time: currentTime } = getCurrentDateTime();
 
-  // 抽奖表单数据
+  // Lottery form data
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [endDate, setEndDate] = useState(currentDate);
   const [endTime, setEndTime] = useState(currentTime);
   const [prizeCount, setPrizeCount] = useState('1');
-  const [quickTimeOption, setQuickTimeOption] = useState('15min'); // 默认选择15分钟
+  const [quickTimeOption, setQuickTimeOption] = useState('15min'); // Default to 15 minutes
 
-  // 检查登录状态
+  // Check login status
   useEffect(() => {
     const userInfoStored = Taro.getStorageSync('userInfo');
     if (userInfoStored) {
       setUserInfo(userInfoStored);
-      console.log("已获取到用户信息:", userInfoStored);
+      console.log("User info retrieved:", userInfoStored);
 
-      // 云开发版本检查管理员权限
+      // Check admin permissions
       if (!userInfoStored.isAdmin) {
         Taro.showToast({
-          title: '您没有创建权限',
+          title: 'You don\'t have creation permission',
           icon: 'none',
           complete: () => {
             setTimeout(() => {
@@ -86,7 +74,7 @@ const Create = () => {
       }
     } else {
       Taro.showToast({
-        title: '请先登录',
+        title: 'Please login first',
         icon: 'none',
         complete: () => {
           setTimeout(() => {
@@ -98,15 +86,15 @@ const Create = () => {
       });
     }
 
-    // 设置默认结束时间为15分钟后
+    // Set default end time to 15 minutes later
     handleQuickTimeSelect('15min');
   }, []);
 
-  // 处理快速时间选择
+  // Handle quick time selection
   const handleQuickTimeSelect = (option) => {
     setQuickTimeOption(option);
 
-    // 根据选项设置结束时间
+    // Set end time based on option
     let futureDateTime;
     switch (option) {
       case '15min':
@@ -125,7 +113,7 @@ const Create = () => {
         futureDateTime = getFutureDateTime(1440);
         break;
       case 'custom':
-        // 自定义时间不做处理
+        // No action for custom time
         return;
       default:
         futureDateTime = getFutureDateTime(15);
@@ -135,48 +123,48 @@ const Create = () => {
     setEndTime(futureDateTime.time);
   };
 
-  // 验证开奖时间是否大于当前时间
+  // Validate end time is greater than current time
   const isEndTimeValid = () => {
     const now = new Date();
-    const endDateTime = new Date(`${endDate}T${endTime}:00`);
+    const endDateTime = new Date(`${endDate} ${endTime}`);
     return endDateTime > now;
   };
 
-  // 返回上一页
+  // Go back to previous page
   const goBack = () => {
     Taro.navigateBack();
   };
 
-  // 创建抽奖 - 云函数版本
+  // Create lottery - Cloud function version
   const handleCreateLottery = async () => {
-    // 表单验证
+    // Form validation
     if (!title.trim()) {
-      Taro.showToast({ title: '请输入抽奖标题', icon: 'none' });
+      Taro.showToast({ title: 'Please enter a lottery title', icon: 'none' });
       return;
     }
 
     if (!endDate || !endTime) {
-      Taro.showToast({ title: '请选择开奖时间', icon: 'none' });
+      Taro.showToast({ title: 'Please select draw time', icon: 'none' });
       return;
     }
 
     if (parseInt(prizeCount) < 1) {
-      Taro.showToast({ title: '奖品数量至少为1', icon: 'none' });
+      Taro.showToast({ title: 'Prize count must be at least 1', icon: 'none' });
       return;
     }
 
-    // 验证开奖时间是否大于当前时间
-    const endDateTime = `${endDate}T${endTime}:00`;
-    if (new Date() >= new Date(endDateTime)) {
-      Taro.showToast({ title: '开奖时间必须大于当前时间', icon: 'none' });
+    // Validate end time is greater than current time
+    const combinedEndDateTime = combineDateTime(endDate, endTime);
+    if (new Date() >= new Date(combinedEndDateTime)) {
+      Taro.showToast({ title: 'Draw time must be greater than current time', icon: 'none' });
       return;
     }
 
-    // 再次检查用户登录状态
+    // Double check user login status
     const storedUserInfo = Taro.getStorageSync('userInfo');
     if (!storedUserInfo) {
       Taro.showToast({
-        title: '登录状态已失效，请重新登录',
+        title: 'Login status expired, please login again',
         icon: 'none',
         complete: () => {
           setTimeout(() => {
@@ -188,44 +176,52 @@ const Create = () => {
     }
 
     if (!storedUserInfo.isAdmin) {
-      Taro.showToast({ title: '您没有创建权限', icon: 'none' });
+      Taro.showToast({ title: 'You don\'t have creation permission', icon: 'none' });
       return;
     }
 
     setLoading(true);
-    Taro.showLoading({ title: '创建中...' });
+    Taro.showLoading({ title: 'Creating...' });
 
     try {
-      console.log("当前登录用户信息:", storedUserInfo);
+      console.log("Current logged-in user info:", storedUserInfo);
 
-      // 获取当前时间作为开始时间
-      const startDateTime = new Date().toLocaleString();
+      // Get current time as start time
+      const startDateTime = new Date().toLocaleString('zh-CN', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      }).replace(/\//g, '-');
 
-      console.log("开始时间:", startDateTime);
-      console.log("结束时间:", endDateTime);
+      console.log("Start time:", startDateTime);
+      console.log("End time:", combinedEndDateTime);
 
-      // 调用云函数创建抽奖
+      // Call cloud function to create lottery
       const lotteryData = {
         title,
         description: description || title,
         startTime: startDateTime,
-        endTime: endDateTime,
+        endTime: combinedEndDateTime,
         prizeCount: parseInt(prizeCount)
       };
 
-      console.log("准备创建抽奖，数据:", lotteryData);
+      console.log("Preparing to create lottery, data:", lotteryData);
 
       const result = await createLottery(lotteryData);
-      console.log("创建抽奖结果:", result);
+      console.log("Lottery creation result:", result);
 
       if (result && result.success) {
         Taro.hideLoading();
         Taro.showToast({
-          title: '创建成功',
+          title: 'Creation successful',
           icon: 'success',
           duration: 2000,
           success: () => {
-            // 跳转到抽奖详情页
+            // Navigate to lottery detail page
             setTimeout(() => {
               Taro.navigateTo({
                 url: `/pages/detail/index?lotteryId=${result.data._id}`,
@@ -236,15 +232,15 @@ const Create = () => {
       } else {
         Taro.hideLoading();
         Taro.showToast({
-          title: result?.message || '创建失败',
+          title: result?.message || 'Creation failed',
           icon: 'none',
         });
       }
     } catch (error) {
-      console.error('创建抽奖失败', error);
+      console.error('Failed to create lottery', error);
       Taro.hideLoading();
       Taro.showToast({
-        title: '创建失败，请重试: ' + (error.message || ''),
+        title: 'Creation failed, please try again: ' + (error.message || ''),
         icon: 'none',
       });
     } finally {
@@ -252,19 +248,19 @@ const Create = () => {
     }
   };
 
-  // 如果未登录或非管理员，显示加载状态
+  // If not logged in or not an admin, show loading state
   if (!userInfo || !userInfo.isAdmin) {
     return (
       <View className='loading-container'>
-        <Text className='loading-text'>检查权限中...</Text>
+        <Text className='loading-text'>Checking permissions...</Text>
       </View>
     );
   }
 
-  // 计算当前时间到开奖时间的差值
+  // Calculate time difference from current time to draw time
   const calculateTimeDifference = () => {
     const now = new Date();
-    const end = new Date(`${endDate}T${endTime}:00`);
+    const end = new Date(`${endDate} ${endTime}`);
 
     const diffMs = end - now;
     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
@@ -279,7 +275,7 @@ const Create = () => {
     return result;
   };
 
-  // 创建抽奖页面
+  // Create lottery page
   return (
     <View className='create-lottery-container'>
       <View className='page-header'>
@@ -290,7 +286,7 @@ const Create = () => {
       </View>
 
       <Form className='lottery-form'>
-        {/* 基本信息 */}
+        {/* Basic Information */}
         <View className='form-section'>
           <Text className='section-title'>基本信息</Text>
 
@@ -373,7 +369,7 @@ const Create = () => {
               start={currentDate}
               onChange={(e) => {
                 setEndDate(e.detail.value);
-                setQuickTimeOption('custom'); // 切换到自定义模式
+                setQuickTimeOption('custom'); // Switch to custom mode
               }}
             >
               <View className='form-picker'>
@@ -389,7 +385,7 @@ const Create = () => {
               value={endTime}
               onChange={(e) => {
                 setEndTime(e.detail.value);
-                setQuickTimeOption('custom'); // 切换到自定义模式
+                setQuickTimeOption('custom'); // Switch to custom mode
               }}
             >
               <View className='form-picker'>
@@ -398,7 +394,7 @@ const Create = () => {
             </Picker>
           </View>
 
-          {/* 开奖时间提示 */}
+          {/* Draw time preview */}
           {endDate && endTime && (
             <View className='time-preview'>
               <Text className='time-preview-label'>开奖倒计时预览：</Text>
@@ -411,7 +407,7 @@ const Create = () => {
           )}
         </View>
 
-        {/* 奖品设置 */}
+        {/* Prize Settings */}
         <View className='form-section'>
           <Text className='section-title'>奖品设置</Text>
 
@@ -447,7 +443,7 @@ const Create = () => {
           </View>
         </View>
 
-        {/* 创建按钮 */}
+        {/* Create Button */}
         <Button
           className={`create-btn ${loading ? 'button-loading' : ''}`}
           loading={loading}

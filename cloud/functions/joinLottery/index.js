@@ -1,4 +1,4 @@
-// cloud/functions/joinLottery/index.js (修改版)
+// cloud/functions/joinLottery/index.js (简化版)
 const cloud = require("wx-server-sdk");
 
 // 初始化云环境
@@ -10,39 +10,12 @@ const db = cloud.database();
 const lotteryCollection = db.collection("lotteries");
 const participantCollection = db.collection("participants");
 
-// 统一的时间处理函数
-function formatTime(time) {
-	if (!time) return "";
-	try {
-		// 处理Date对象
-		if (time instanceof Date) {
-			return time.toISOString().replace("Z", "");
-		}
-		// 处理字符串
-		if (typeof time === "string") {
-			return time.replace("Z", "");
-		}
-		return String(time);
-	} catch (error) {
-		console.error("格式化时间出错:", error);
-		return "";
-	}
-}
-
 // 判断时间是否已过期
 function isExpired(time) {
 	if (!time) return false;
 	try {
-		const formattedTime = formatTime(time);
-		const targetTime = new Date(formattedTime);
-		const now = new Date();
-
-		if (isNaN(targetTime.getTime())) {
-			console.error("无效的时间:", time);
-			return false;
-		}
-
-		return now >= targetTime;
+		const dateObj = new Date(time);
+		return new Date() >= dateObj;
 	} catch (error) {
 		console.error("判断时间是否过期出错:", error);
 		return false;
@@ -74,26 +47,9 @@ exports.main = async (event, context) => {
 
 		const lottery = lotteryResult.data;
 
-		// 确保时间字段格式正确
-		if (typeof lottery.endTime === "string" && lottery.endTime.includes("Z")) {
-			lottery.endTime = formatTime(lottery.endTime);
-			// 异步更新数据库，不等待结果
-			lotteryCollection
-				.doc(lotteryId)
-				.update({
-					data: { endTime: lottery.endTime },
-				})
-				.catch((err) => console.error("更新endTime字段失败:", err));
-		}
-
-		// 使用统一函数判断抽奖是否已结束
+		// 使用简化函数判断抽奖是否已结束
 		const isEnded = isExpired(lottery.endTime);
-		console.log(
-			"抽奖是否已结束:",
-			isEnded,
-			"结束时间:",
-			formatTime(lottery.endTime)
-		);
+		console.log("抽奖是否已结束:", isEnded, "结束时间:", lottery.endTime);
 
 		if (isEnded) {
 			return {

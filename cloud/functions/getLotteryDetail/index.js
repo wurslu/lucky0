@@ -1,4 +1,4 @@
-// cloud/functions/getLotteryDetail/index.js (修改版)
+// cloud/functions/getLotteryDetail/index.js (简化版)
 const cloud = require("wx-server-sdk");
 
 // 初始化云环境
@@ -12,42 +12,37 @@ const lotteryCollection = db.collection("lotteries");
 const userCollection = db.collection("users");
 const participantCollection = db.collection("participants");
 
-// 统一的时间处理函数
-function formatTime(time) {
-	if (!time) return "";
-	try {
-		// 处理Date对象
-		if (time instanceof Date) {
-			return time.toISOString().replace("Z", "");
-		}
-		// 处理字符串
-		if (typeof time === "string") {
-			return time.replace("Z", "");
-		}
-		return String(time);
-	} catch (error) {
-		console.error("格式化时间出错:", error);
-		return "";
-	}
-}
-
 // 判断时间是否已过期
 function isExpired(time) {
 	if (!time) return false;
 	try {
-		const formattedTime = formatTime(time);
-		const targetTime = new Date(formattedTime);
-		const now = new Date();
-
-		if (isNaN(targetTime.getTime())) {
-			console.error("无效的时间:", time);
-			return false;
-		}
-
-		return now >= targetTime;
+		const dateObj = new Date(time);
+		return new Date() >= dateObj;
 	} catch (error) {
 		console.error("判断时间是否过期出错:", error);
 		return false;
+	}
+}
+
+// 日期格式化函数 - 使用本地字符串格式
+function formatTime(date) {
+	if (!date) return "";
+	try {
+		const dateObj = typeof date === "string" ? new Date(date) : date;
+		return dateObj
+			.toLocaleString("zh-CN", {
+				year: "numeric",
+				month: "2-digit",
+				day: "2-digit",
+				hour: "2-digit",
+				minute: "2-digit",
+				second: "2-digit",
+				hour12: false,
+			})
+			.replace(/\//g, "-");
+	} catch (error) {
+		console.error("格式化时间出错:", error);
+		return "";
 	}
 }
 
@@ -76,32 +71,6 @@ exports.main = async (event, context) => {
 
 		const lottery = lotteryResult.data;
 		console.log("抽奖原始信息:", lottery);
-
-		// 确保时间字段格式正确 - 如果还没有格式化，进行修正
-		if (
-			typeof lottery.startTime === "string" &&
-			lottery.startTime.includes("Z")
-		) {
-			lottery.startTime = formatTime(lottery.startTime);
-			// 异步更新数据库，不等待结果
-			lotteryCollection
-				.doc(id)
-				.update({
-					data: { startTime: lottery.startTime },
-				})
-				.catch((err) => console.error("更新startTime字段失败:", err));
-		}
-
-		if (typeof lottery.endTime === "string" && lottery.endTime.includes("Z")) {
-			lottery.endTime = formatTime(lottery.endTime);
-			// 异步更新数据库，不等待结果
-			lotteryCollection
-				.doc(id)
-				.update({
-					data: { endTime: lottery.endTime },
-				})
-				.catch((err) => console.error("更新endTime字段失败:", err));
-		}
 
 		// 查询创建者信息 - 统一使用_openid
 		let creatorResult = null;
@@ -193,14 +162,9 @@ exports.main = async (event, context) => {
 			};
 		});
 
-		// 判断抽奖是否已结束 - 使用统一的时间格式判断
+		// 判断抽奖是否已结束 - 使用简化的时间判断
 		const isEnded = isExpired(lottery.endTime);
-		console.log(
-			"抽奖是否已结束:",
-			isEnded,
-			"结束时间:",
-			formatTime(lottery.endTime)
-		);
+		console.log("抽奖是否已结束:", isEnded, "结束时间:", lottery.endTime);
 
 		// 获取中奖者信息
 		console.log("开始查询中奖者，数据库中的标记:");
@@ -267,7 +231,6 @@ exports.main = async (event, context) => {
 			console.log("检测到时间已过且hasDrawn=true但没有找到中奖者，尝试修复");
 
 			try {
-				// cloud/functions/getLotteryDetail/index.js (修改版) - 续
 				// 随机选择中奖者
 				const winnerCount = Math.min(
 					lottery.prizeCount || 1,

@@ -1,4 +1,4 @@
-// client/src/pages/detail/components/TestButtons.jsx
+// client/src/pages/detail/components/TestButtons.jsx - 修复导入语句
 import React from 'react';
 import { View, Button } from '@tarojs/components';
 import { debugLottery, testAutoDrawLottery, testCurrentLotteryDraw } from '../testUtils';

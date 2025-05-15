@@ -1,7 +1,7 @@
-// cloud/functions/autoDrawLottery/index.js (完整修改版)
+// cloud/functions/autoDrawLottery/index.js (Simplified version)
 const cloud = require("wx-server-sdk");
 
-// 初始化云环境
+// Initialize cloud environment
 cloud.init({
 	env: cloud.DYNAMIC_CURRENT_ENV,
 });
@@ -11,92 +11,69 @@ const _ = db.command;
 const lotteryCollection = db.collection("lotteries");
 const participantCollection = db.collection("participants");
 
-// 统一的时间处理函数
-function formatTime(time) {
-	if (!time) return "";
+// Check if a date is in the past
+function isExpired(date) {
+	if (!date) return false;
 	try {
-		// 处理Date对象
-		if (time instanceof Date) {
-			return time.toISOString().replace("Z", "");
-		}
-		// 处理字符串
-		if (typeof time === "string") {
-			return time.replace("Z", "");
-		}
-		return String(time);
+		const dateObj = new Date(date);
+		return dateObj < new Date();
 	} catch (error) {
-		console.error("格式化时间出错:", error);
-		return "";
-	}
-}
-
-// 判断时间是否已过期
-function isExpired(time) {
-	if (!time) return false;
-	try {
-		const formattedTime = formatTime(time);
-		const targetTime = new Date(formattedTime);
-		const now = new Date();
-
-		if (isNaN(targetTime.getTime())) {
-			console.error("无效的时间:", time);
-			return false;
-		}
-
-		return now >= targetTime;
-	} catch (error) {
-		console.error("判断时间是否过期出错:", error);
+		console.error("Error checking if time has expired:", error);
 		return false;
 	}
 }
 
-// 随机选择函数
+// Random selection function
 function getRandomItems(array, count) {
 	const shuffled = [...array].sort(() => 0.5 - Math.random());
 	return shuffled.slice(0, Math.min(count, array.length));
 }
 
-// 自动开奖主函数
+// Auto draw main function
 exports.main = async (event, context) => {
-	console.log("开始运行自动开奖函数...");
+	console.log("Starting auto draw function...");
 	const now = new Date();
 	const results = [];
 
 	try {
-		// 改进的查询逻辑：先获取所有未开奖的抽奖
+		// Improved query logic: first get all undrawn lotteries
 		const pendingLotteries = await lotteryCollection
 			.where({
 				hasDrawn: _.or(_.eq(false), _.exists(false)),
 			})
-			.limit(20) // 每次最多处理20个抽奖
+			.limit(20) // Process at most 20 lotteries each time
 			.get();
 
-		// 手动过滤出已过期的抽奖
+		// Manually filter out expired lotteries
 		const endedLotteries = {
 			data: pendingLotteries.data.filter((lottery) => {
-				// 使用统一的时间格式化函数判断是否过期
+				// Use simplified time check
 				return isExpired(lottery.endTime);
 			}),
 		};
 
-		console.log(`找到 ${endedLotteries.data.length} 个需要开奖的抽奖活动`);
+		console.log(
+			`Found ${endedLotteries.data.length} lotteries that need to be drawn`
+		);
 
-		// 如果没有需要开奖的抽奖
+		// If no lotteries need to be drawn
 		if (endedLotteries.data.length === 0) {
 			return {
 				success: true,
-				message: "无需要开奖的抽奖",
+				message: "No lotteries need to be drawn",
 				results: [],
 			};
 		}
 
-		// 处理每个已结束的抽奖
+		// Process each ended lottery
 		for (const lottery of endedLotteries.data) {
-			console.log(`处理抽奖ID: ${lottery._id}, 标题: ${lottery.title}`);
-			console.log(`抽奖结束时间: ${formatTime(lottery.endTime)}`);
+			console.log(
+				`Processing lottery ID: ${lottery._id}, Title: ${lottery.title}`
+			);
+			console.log(`Lottery end time: ${lottery.endTime}`);
 
 			try {
-				// 获取该抽奖的所有参与者
+				// Get all participants for this lottery
 				const participantsResult = await participantCollection
 					.where({
 						lotteryId: lottery._id,
@@ -104,7 +81,9 @@ exports.main = async (event, context) => {
 					.get();
 
 				const participants = participantsResult.data;
-				console.log(`抽奖 ${lottery._id} 有 ${participants.length} 个参与者`);
+				console.log(
+					`Lottery ${lottery._id} has ${participants.length} participants`
+				);
 
 				let resultItem = {
 					lotteryId: lottery._id,
@@ -112,11 +91,11 @@ exports.main = async (event, context) => {
 					success: true,
 				};
 
-				// 处理无人参与情况
+				// Handle case with no participants
 				if (participants.length === 0) {
-					console.log(`抽奖 ${lottery._id} 无人参与`);
+					console.log(`Lottery ${lottery._id} has no participants`);
 
-					// 标记抽奖已开奖但无人参与
+					// Mark lottery as drawn but with no participants
 					await lotteryCollection.doc(lottery._id).update({
 						data: {
 							hasDrawn: true,
@@ -127,31 +106,33 @@ exports.main = async (event, context) => {
 						},
 					});
 
-					resultItem.message = "已自动开奖，无人参与";
+					resultItem.message = "Auto-drawn, no participants";
 					resultItem.winnerCount = 0;
 					resultItem.noParticipants = true;
 				} else {
-					// 有人参与情况下进行开奖
-					console.log(`抽奖 ${lottery._id} 开始抽取中奖者`);
+					// With participants, proceed with draw
+					console.log(`Lottery ${lottery._id} starting to draw winners`);
 
-					// 确定中奖人数（不超过参与人数和设置的奖品数量）
+					// Determine winner count (not exceeding participant count and prize count)
 					const winnerCount = Math.min(
 						lottery.prizeCount || 1,
 						participants.length
 					);
 
-					// 随机选取中奖者
+					// Randomly select winners
 					const winners = getRandomItems(participants, winnerCount);
 					const winnerIds = winners.map((w) => w._id);
 
-					console.log(`抽奖 ${lottery._id} 选出 ${winnerIds.length} 个中奖者`);
+					console.log(
+						`Lottery ${lottery._id} selected ${winnerIds.length} winners`
+					);
 
 					try {
-						// 使用事务处理开奖操作
+						// Use transaction to handle draw operation
 						const transaction = await db.startTransaction();
 
 						try {
-							// 更新中奖者状态
+							// Update winner status
 							if (winnerIds.length > 0) {
 								await transaction
 									.collection("participants")
@@ -166,7 +147,7 @@ exports.main = async (event, context) => {
 									});
 							}
 
-							// 更新抽奖状态
+							// Update lottery status
 							await transaction
 								.collection("lotteries")
 								.doc(lottery._id)
@@ -180,22 +161,24 @@ exports.main = async (event, context) => {
 									},
 								});
 
-							// 提交事务
+							// Commit transaction
 							await transaction.commit();
 
-							resultItem.message = `已自动开奖，选出 ${winnerCount} 个中奖者`;
+							resultItem.message = `Auto-drawn, selected ${winnerCount} winners`;
 							resultItem.winnerCount = winnerCount;
 							resultItem.noParticipants = false;
 
-							console.log(`抽奖 ${lottery._id} 开奖成功`);
+							console.log(`Lottery ${lottery._id} draw successful`);
 						} catch (error) {
-							// 事务失败，回滚
+							// Transaction failed, rollback
 							await transaction.rollback();
 
-							// 尝试直接更新
-							console.log(`事务开奖失败，尝试直接更新: ${error.message}`);
+							// Try direct update
+							console.log(
+								`Transaction draw failed, trying direct update: ${error.message}`
+							);
 
-							// 更新中奖者状态
+							// Update winner status
 							if (winnerIds.length > 0) {
 								for (const winnerId of winnerIds) {
 									await participantCollection.doc(winnerId).update({
@@ -207,7 +190,7 @@ exports.main = async (event, context) => {
 								}
 							}
 
-							// 更新抽奖状态
+							// Update lottery status
 							await lotteryCollection.doc(lottery._id).update({
 								data: {
 									hasDrawn: true,
@@ -218,42 +201,47 @@ exports.main = async (event, context) => {
 								},
 							});
 
-							resultItem.message = `已直接更新开奖，选出 ${winnerCount} 个中奖者`;
+							resultItem.message = `Direct update drawn, selected ${winnerCount} winners`;
 							resultItem.winnerCount = winnerCount;
 							resultItem.noParticipants = false;
 							resultItem.transactionFailed = true;
 
-							console.log(`抽奖 ${lottery._id} 直接更新成功`);
+							console.log(`Lottery ${lottery._id} direct update successful`);
 						}
 					} catch (error) {
-						// 如果事务和直接更新都失败了
-						console.error(`抽奖 ${lottery._id} 开奖操作完全失败:`, error);
-						throw new Error(`开奖操作失败: ${error.message}`);
+						// If both transaction and direct update fail
+						console.error(
+							`Lottery ${lottery._id} draw operation completely failed:`,
+							error
+						);
+						throw new Error(`Draw operation failed: ${error.message}`);
 					}
 				}
 
 				results.push(resultItem);
 			} catch (error) {
-				console.error(`处理抽奖 ${lottery._id} 时出错:`, error);
+				console.error(`Error processing lottery ${lottery._id}:`, error);
 				results.push({
 					lotteryId: lottery._id,
 					title: lottery.title,
 					success: false,
-					message: `开奖失败: ${error.message || "未知错误"}`,
+					message: `Draw failed: ${error.message || "Unknown error"}`,
 				});
 			}
 		}
 
 		return {
 			success: true,
-			message: `已处理 ${results.length} 个抽奖活动`,
+			message: `Processed ${results.length} lotteries`,
 			results: results,
 		};
 	} catch (error) {
-		console.error("自动开奖执行失败:", error);
+		console.error("Auto draw execution failed:", error);
 		return {
 			success: false,
-			message: `自动开奖执行失败: ${error.message || "未知错误"}`,
+			message: `Auto draw execution failed: ${
+				error.message || "Unknown error"
+			}`,
 			error: error.message,
 			results: results,
 		};

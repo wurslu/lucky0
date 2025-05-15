@@ -1,7 +1,7 @@
-// cloud/functions/drawLottery/index.js (修改版)
+// cloud/functions/drawLottery/index.js (Simplified version)
 const cloud = require("wx-server-sdk");
 
-// 初始化云环境
+// Initialize cloud environment
 cloud.init({
 	env: cloud.DYNAMIC_CURRENT_ENV,
 });
@@ -12,111 +12,81 @@ const lotteryCollection = db.collection("lotteries");
 const participantCollection = db.collection("participants");
 const userCollection = db.collection("users");
 
-// 统一的时间处理函数
-function formatTime(time) {
-	if (!time) return "";
-	try {
-		// 处理Date对象
-		if (time instanceof Date) {
-			return time.toISOString().replace("Z", "");
-		}
-		// 处理字符串
-		if (typeof time === "string") {
-			return time.replace("Z", "");
-		}
-		return String(time);
-	} catch (error) {
-		console.error("格式化时间出错:", error);
-		return "";
-	}
-}
-
-// 随机选择函数
+// Random selection function
 function getRandomItems(array, count) {
 	const shuffled = [...array].sort(() => 0.5 - Math.random());
 	return shuffled.slice(0, Math.min(count, array.length));
 }
 
-// 主函数
+// Main function
 exports.main = async (event, context) => {
 	const wxContext = cloud.getWXContext();
 	const { id } = event;
 
-	console.log("手动开奖操作 - 抽奖ID:", id);
-	console.log("当前用户OPENID:", wxContext.OPENID);
+	console.log("Manual draw operation - Lottery ID:", id);
+	console.log("Current user OPENID:", wxContext.OPENID);
 
 	if (!id) {
 		return {
 			success: false,
-			message: "抽奖ID不能为空",
+			message: "Lottery ID cannot be empty",
 		};
 	}
 
 	try {
-		// 查询抽奖信息
+		// Query lottery information
 		const lotteryResult = await lotteryCollection.doc(id).get();
 
 		if (!lotteryResult.data) {
 			return {
 				success: false,
-				message: "未找到抽奖信息",
+				message: "Lottery not found",
 			};
 		}
 
 		const lottery = lotteryResult.data;
-		console.log("抽奖信息:", lottery);
+		console.log("Lottery info:", lottery);
 
-		// 确保时间字段格式正确
-		if (
-			typeof lottery.startTime === "string" &&
-			lottery.startTime.includes("Z")
-		) {
-			lottery.startTime = formatTime(lottery.startTime);
-		}
-
-		if (typeof lottery.endTime === "string" && lottery.endTime.includes("Z")) {
-			lottery.endTime = formatTime(lottery.endTime);
-		}
-
-		// 检查抽奖是否已经开奖
+		// Check if lottery has already been drawn
 		if (lottery.hasDrawn) {
-			console.log("抽奖已开奖，无法重复开奖");
+			console.log("Lottery already drawn, cannot draw again");
 			return {
 				success: false,
-				message: "该抽奖已经开奖，无法重复开奖",
+				message:
+					"This lottery has already been drawn and cannot be drawn again",
 			};
 		}
 
-		// 查询当前用户信息，检查是否有权限操作
+		// Query current user information, check if they have permission
 		const userResult = await userCollection
 			.where({
 				_openid: wxContext.OPENID,
 			})
 			.get();
 
-		console.log("用户查询结果:", userResult);
+		console.log("User query result:", userResult);
 
 		if (userResult.data.length === 0) {
 			return {
 				success: false,
-				message: "用户不存在",
+				message: "User does not exist",
 			};
 		}
 
 		const user = userResult.data[0];
-		console.log("当前用户信息:", user);
+		console.log("Current user info:", user);
 
-		// 检查是否是创建者或管理员
+		// Check if user is the creator or an admin
 		const isCreator = lottery._openid === wxContext.OPENID;
 
 		if (!isCreator && !user.isAdmin) {
 			return {
 				success: false,
-				message: "您没有权限进行开奖操作",
+				message: "You do not have permission to perform the draw operation",
 			};
 		}
 
-		// 查询所有参与者
+		// Query all participants
 		const participantsResult = await participantCollection
 			.where({
 				lotteryId: id,
@@ -124,13 +94,13 @@ exports.main = async (event, context) => {
 			.get();
 
 		const participants = participantsResult.data;
-		console.log("参与者数量:", participants.length);
+		console.log("Number of participants:", participants.length);
 
-		// 处理无人参与情况
+		// Handle case with no participants
 		if (participants.length === 0) {
-			console.log("抽奖无人参与");
+			console.log("No participants in lottery");
 
-			// 标记抽奖已开奖但无人参与
+			// Mark lottery as drawn but with no participants
 			const updateResult = await lotteryCollection.doc(id).update({
 				data: {
 					hasDrawn: true,
@@ -141,11 +111,11 @@ exports.main = async (event, context) => {
 				},
 			});
 
-			console.log("无人参与抽奖更新结果:", updateResult);
+			console.log("Update result for no participants lottery:", updateResult);
 
 			return {
 				success: true,
-				message: "已开奖，但无人参与",
+				message: "Lottery drawn, but no participants",
 				data: {
 					winnerCount: 0,
 					noParticipants: true,
@@ -153,24 +123,24 @@ exports.main = async (event, context) => {
 			};
 		}
 
-		// 确定中奖人数
+		// Determine number of winners
 		const winnerCount = Math.min(lottery.prizeCount || 1, participants.length);
-		console.log("中奖人数:", winnerCount);
+		console.log("Winner count:", winnerCount);
 
-		// 随机选取中奖者
+		// Randomly select winners
 		const winners = getRandomItems(participants, winnerCount);
 		const winnerIds = winners.map((w) => w._id);
-		console.log("中奖者ID:", winnerIds);
+		console.log("Winner IDs:", winnerIds);
 
 		let updateSuccess = false;
 		let detailedWinners = [];
 
 		try {
-			// 使用事务处理开奖操作
+			// Use transaction to handle draw operation
 			const transaction = await db.startTransaction();
 
 			try {
-				// 更新中奖者状态
+				// Update winner status
 				if (winnerIds.length > 0) {
 					await transaction
 						.collection("participants")
@@ -184,10 +154,10 @@ exports.main = async (event, context) => {
 							},
 						});
 
-					console.log(`已更新中奖者状态`);
+					console.log(`Updated winner status`);
 				}
 
-				// 更新抽奖信息
+				// Update lottery information
 				await transaction
 					.collection("lotteries")
 					.doc(id)
@@ -201,22 +171,25 @@ exports.main = async (event, context) => {
 						},
 					});
 
-				// 提交事务
+				// Commit transaction
 				await transaction.commit();
 				updateSuccess = true;
-				console.log("开奖事务提交成功");
+				console.log("Draw transaction committed successfully");
 			} catch (error) {
-				// 事务失败，回滚
+				// Transaction failed, rollback
 				await transaction.rollback();
-				console.error("开奖事务失败，已回滚:", error);
+				console.error("Draw transaction failed, rolled back:", error);
 				throw error;
 			}
 		} catch (error) {
-			console.error("事务处理失败，尝试直接更新:", error);
+			console.error(
+				"Transaction processing failed, trying direct update:",
+				error
+			);
 
-			// 如果事务失败，尝试直接更新
+			// If transaction fails, try direct update
 			try {
-				// 更新中奖者状态
+				// Update winner status
 				if (winnerIds.length > 0) {
 					for (const winnerId of winnerIds) {
 						await participantCollection.doc(winnerId).update({
@@ -228,7 +201,7 @@ exports.main = async (event, context) => {
 					}
 				}
 
-				// 更新抽奖信息
+				// Update lottery information
 				await lotteryCollection.doc(id).update({
 					data: {
 						hasDrawn: true,
@@ -240,20 +213,20 @@ exports.main = async (event, context) => {
 				});
 
 				updateSuccess = true;
-				console.log("直接更新成功");
+				console.log("Direct update successful");
 			} catch (directUpdateError) {
-				console.error("直接更新也失败:", directUpdateError);
+				console.error("Direct update also failed:", directUpdateError);
 				throw directUpdateError;
 			}
 		}
 
-		// 确认更新成功后，查询中奖者详细信息用于返回
+		// Confirm update was successful, query winner details for return
 		if (updateSuccess) {
 			try {
-				// 获取中奖者的openid列表
+				// Get winner openids
 				const winnerOpenIds = winners.map((w) => w._openid).filter((id) => id);
 
-				// 查询用户信息
+				// Query user information
 				if (winnerOpenIds.length > 0) {
 					const userDetails = await userCollection
 						.where({
@@ -261,7 +234,7 @@ exports.main = async (event, context) => {
 						})
 						.get();
 
-					// 创建用户信息映射
+					// Create user information mapping
 					const userMap = {};
 					if (userDetails.data && userDetails.data.length > 0) {
 						userDetails.data.forEach((user) => {
@@ -271,7 +244,7 @@ exports.main = async (event, context) => {
 						});
 					}
 
-					// 合并中奖者和用户信息
+					// Combine winner and user information
 					detailedWinners = winners.map((winner) => {
 						const userInfo = userMap[winner._openid] || {};
 						return {
@@ -282,29 +255,29 @@ exports.main = async (event, context) => {
 						};
 					});
 				} else {
-					// 如果无法获取详情，使用原始中奖者信息
+					// If unable to get details, use original winner information
 					detailedWinners = winners.map((w) => ({ ...w, isWinner: true }));
 				}
 			} catch (error) {
-				console.error("获取中奖者详情失败:", error);
-				// 如果获取详情失败，至少返回基本中奖者信息
+				console.error("Failed to get winner details:", error);
+				// If getting details fails, at least return basic winner information
 				detailedWinners = winners.map((w) => ({ ...w, isWinner: true }));
 			}
 		}
 
 		return {
 			success: true,
-			message: "开奖成功",
+			message: "Draw successful",
 			data: {
 				winnerCount,
 				winners: detailedWinners,
 			},
 		};
 	} catch (error) {
-		console.error("开奖失败", error);
+		console.error("Draw failed", error);
 		return {
 			success: false,
-			message: "开奖失败，请重试: " + error.message,
+			message: "Draw failed, please try again: " + error.message,
 			error: error.message,
 		};
 	}

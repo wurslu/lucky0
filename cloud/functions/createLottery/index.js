@@ -1,7 +1,7 @@
-// cloud/functions/createLottery/index.js (修改版)
+// cloud/functions/createLottery/index.js (Simplified version)
 const cloud = require("wx-server-sdk");
 
-// 初始化云环境
+// Initialize cloud environment
 cloud.init({
 	env: cloud.DYNAMIC_CURRENT_ENV,
 });
@@ -10,108 +10,100 @@ const db = cloud.database();
 const lotteryCollection = db.collection("lotteries");
 const userCollection = db.collection("users");
 
-// 统一的时间处理函数
-function formatTime(time) {
-	if (!time) return "";
-	try {
-		// 处理Date对象
-		if (time instanceof Date) {
-			return time.toISOString().replace("Z", "");
-		}
-		// 处理字符串
-		if (typeof time === "string") {
-			return time.replace("Z", "");
-		}
-		return String(time);
-	} catch (error) {
-		console.error("格式化时间出错:", error);
-		return "";
-	}
-}
-
-// 主函数
+// Main function
 exports.main = async (event, context) => {
 	const wxContext = cloud.getWXContext();
 	const { title, description, startTime, endTime, prizeCount } = event;
 
-	// 参数验证
+	// Parameter validation
 	if (!title) {
-		return { success: false, message: "标题不能为空" };
+		return { success: false, message: "Title cannot be empty" };
 	}
 
 	if (!endTime) {
-		return { success: false, message: "开奖时间不能为空" };
+		return { success: false, message: "Draw time cannot be empty" };
 	}
 
 	if (!prizeCount || prizeCount < 1) {
-		return { success: false, message: "奖品数量至少为1" };
+		return { success: false, message: "Prize count must be at least 1" };
 	}
 
-	// 统一格式化时间，确保不带Z后缀
-	const formattedStartTime = formatTime(startTime || new Date());
-	const formattedEndTime = formatTime(endTime);
+	// Use provided times or default to now for start time
+	const formattedStartTime =
+		startTime ||
+		new Date()
+			.toLocaleString("zh-CN", {
+				year: "numeric",
+				month: "2-digit",
+				day: "2-digit",
+				hour: "2-digit",
+				minute: "2-digit",
+				second: "2-digit",
+				hour12: false,
+			})
+			.replace(/\//g, "-");
 
-	console.log("格式化后的开始时间:", formattedStartTime);
-	console.log("格式化后的结束时间:", formattedEndTime);
+	console.log("Formatted start time:", formattedStartTime);
+	console.log("Formatted end time:", endTime);
 
-	// 创建Date对象用于比较
+	// Create Date objects for comparison
 	const startDateTime = new Date(formattedStartTime);
-	const endDateTime = new Date(formattedEndTime);
+	const endDateTime = new Date(endTime);
 
-	// 验证开奖时间必须大于开始时间
+	// Validate end time must be after start time
 	if (endDateTime <= startDateTime) {
-		return { success: false, message: "开奖时间必须大于开始时间" };
+		return { success: false, message: "Draw time must be after start time" };
 	}
 
 	try {
-		console.log("当前用户OPENID:", wxContext.OPENID);
+		console.log("Current user OPENID:", wxContext.OPENID);
 
-		// 检查用户权限
+		// Check user permissions
 		const userResult = await userCollection
 			.where({
 				_openid: wxContext.OPENID,
 			})
 			.get();
 
-		console.log("查询用户结果:", userResult);
+		console.log("User query result:", userResult);
 
 		if (userResult.data.length === 0) {
 			return {
 				success: false,
-				message: "用户不存在，请重新登录",
+				message: "User does not exist, please login again",
 			};
 		}
 
 		const user = userResult.data[0];
-		console.log("找到用户:", user);
+		console.log("Found user:", user);
 
-		// 检查是否有创建权限（管理员）
+		// Check if user has creation permission (admin)
 		if (!user.isAdmin) {
 			return {
 				success: false,
-				message: "您没有创建抽奖的权限",
+				message: "You do not have permission to create a lottery",
 			};
 		}
 
-		// 创建抽奖
+		// Create lottery
 		const now = db.serverDate();
 
-		// 添加抽奖记录 - 使用统一格式的时间字符串
+		// Add lottery record - using simplified time strings
 		const result = await lotteryCollection.add({
 			data: {
 				title,
 				description: description || title,
-				startTime: formattedStartTime, // 存储格式化后的字符串
-				endTime: formattedEndTime, // 存储格式化后的字符串
+				startTime: formattedStartTime,
+				endTime: endTime,
 				prizeCount: parseInt(prizeCount),
-				_openid: wxContext.OPENID, // 统一使用_openid
+				_openid: wxContext.OPENID, // Use _openid consistently
 				createTime: now,
 				updateTime: now,
 				hasDrawn: false,
 			},
 		});
 
-		// 获取创建后的抽奖信息
+		// Get created lottery info
 		const lotteryResult = await lotteryCollection.doc(result._id).get();
 
 		return {
@@ -119,10 +111,12 @@ exports.main = async (event, context) => {
 			data: lotteryResult.data,
 		};
 	} catch (error) {
-		console.error("创建抽奖失败", error);
+		console.error("Failed to create lottery", error);
 		return {
 			success: false,
-			message: "创建抽奖失败，请重试: " + (error.message || "未知错误"),
+			message:
+				"Failed to create lottery, please try again: " +
+				(error.message || "Unknown error"),
 			error,
 		};
 	}

@@ -1,4 +1,4 @@
-// client/src/pages/detail/timeHandler.js (修改版)
+// client/src/pages/detail/timeHandler.js (Simplified version)
 import {
   formatChineseTime,
   getCountdownString,
@@ -6,7 +6,7 @@ import {
 } from "../../utils/timeUtils";
 
 /**
- * 处理倒计时逻辑
+ * Handle countdown logic
  */
 export const startCountdownTimer = (
   endTime,
@@ -18,100 +18,100 @@ export const startCountdownTimer = (
   fetchLotteryDetail,
   lotteryId
 ) => {
-  // 清除可能存在的之前的定时器
+  // Clear any existing timer
   if (countdownTimer) {
     clearInterval(countdownTimer);
   }
 
   try {
-    // 格式化结束时间，确保没有Z后缀
-    const formattedEndTime = formatTime(endTime);
-    console.log("格式化后的结束时间:", formattedEndTime);
-
-    // 首先验证结束时间是否有效
-    const endDateTime = new Date(formattedEndTime);
+    // Parse the end time into a Date object
+    const endDateTime = new Date(endTime);
     const now = new Date();
 
-    console.log("开始倒计时，当前时间:", formatChineseTime(now));
-    console.log("目标时间:", formatChineseTime(endDateTime));
+    console.log("Starting countdown, current time:", formatChineseTime(now));
+    console.log("Target time:", formatChineseTime(endDateTime));
 
-    // 检查日期是否有效
+    // Check if date is valid
     if (isNaN(endDateTime.getTime())) {
-      console.error("无效的结束时间:", formattedEndTime);
-      setCountdown("无效的时间");
+      console.error("Invalid end time:", endTime);
+      setCountdown("Invalid time");
       return;
     }
 
-    // 如果结束时间已过，直接显示00:00:00
+    // If end time has passed, display 00:00:00
     if (now >= endDateTime) {
-      console.log("结束时间已过，显示零时间");
+      console.log("End time has passed, showing zero time");
       setCountdown("00:00:00");
 
-      // 只刷新一次，避免重复刷新
+      // Only refresh once to avoid repeated refreshes
       if (initialLoadDoneRef.current && !refreshingRef.current) {
-        console.log("抽奖结束后首次刷新数据");
+        console.log("First refresh after lottery ends");
 
-        // 设置刷新标志
+        // Set refresh flag
         refreshingRef.current = true;
 
-        // 设置延迟，确保不会立即刷新
+        // Set a delay to ensure it doesn't refresh immediately
         setTimeout(() => {
-          // 传入lotteryId作为参数
+          // Pass lotteryId as parameter
           if (lotteryId) {
             fetchLotteryDetail(lotteryId);
           } else {
-            console.error("无法刷新抽奖详情：lotteryId为空");
+            console.error("Cannot refresh lottery details: lotteryId is empty");
           }
 
-          // 设置定时再次刷新一次，获取可能的开奖结果
+          // Set timer to refresh again to get possible draw results
           setTimeout(() => {
-            console.log("再次尝试刷新以获取开奖结果");
-            refreshingRef.current = false; // 重置刷新标志
+            console.log("Trying to refresh again to get draw results");
+            refreshingRef.current = false; // Reset refresh flag
 
             if (lotteryId) {
               fetchLotteryDetail(lotteryId);
             } else {
-              console.error("无法刷新抽奖详情：lotteryId为空");
+              console.error(
+                "Cannot refresh lottery details: lotteryId is empty"
+              );
             }
-          }, 8000); // 8秒后再次刷新
+          }, 8000); // Refresh again after 8 seconds
         }, 3000);
       }
       return;
     }
 
-    // 使用工具函数获取倒计时字符串
-    setCountdown(getCountdownString(formattedEndTime));
+    // Use utility function to get countdown string
+    setCountdown(getCountdownString(endTime));
 
-    // 设置新的定时器 - 每秒更新一次
+    // Set new timer - update every second
     const timer = setInterval(() => {
-      const countdown = getCountdownString(formattedEndTime);
+      const countdown = getCountdownString(endTime);
       setCountdown(countdown);
 
-      // 如果倒计时结束，清除定时器并刷新数据
+      // If countdown ends, clear timer and refresh data
       if (countdown === "00:00:00") {
         clearInterval(timer);
-        console.log("倒计时结束，刷新数据");
+        console.log("Countdown ended, refreshing data");
 
-        // 设置刷新标志
+        // Set refresh flag
         refreshingRef.current = true;
 
-        // 延迟几秒后再刷新，给自动开奖云函数时间执行
+        // Delay refresh for a few seconds to give auto draw cloud function time to execute
         setTimeout(() => {
           if (lotteryId) {
             fetchLotteryDetail(lotteryId);
           } else {
-            console.error("无法刷新抽奖详情：lotteryId为空");
+            console.error("Cannot refresh lottery details: lotteryId is empty");
           }
 
-          // 5秒后再次刷新以获取最新开奖结果
+          // Refresh again after 5 seconds to get latest draw results
           setTimeout(() => {
-            console.log("再次尝试获取开奖结果");
-            refreshingRef.current = false; // 重置刷新标志
+            console.log("Trying to get draw results again");
+            refreshingRef.current = false; // Reset refresh flag
 
             if (lotteryId) {
               fetchLotteryDetail(lotteryId);
             } else {
-              console.error("无法刷新抽奖详情：lotteryId为空");
+              console.error(
+                "Cannot refresh lottery details: lotteryId is empty"
+              );
             }
           }, 5000);
         }, 3000);
@@ -121,8 +121,8 @@ export const startCountdownTimer = (
     setCountdownTimer(timer);
     return timer;
   } catch (error) {
-    console.error("启动倒计时出错:", error);
-    setCountdown("计时错误");
+    console.error("Error starting countdown:", error);
+    setCountdown("Timer error");
     return null;
   }
 };

@@ -1,4 +1,4 @@
-// client/src/pages/index/index.jsx - 完整版，修复时间问题
+// client/src/pages/index/index.jsx - 导入修复
 import React, { useState, useEffect } from 'react';
 import Taro from '@tarojs/taro';
 import { View, Text, Button, Image, ScrollView } from '@tarojs/components';
@@ -9,8 +9,7 @@ import {
 } from '../../utils/api';
 import {
   formatShortChineseTime,
-  isTimeExpired,
-  normalizeTimeString
+  isExpired  // 修改: 使用 isExpired 代替 isTimeExpired
 } from '../../utils/timeUtils';
 import './index.scss';
 
@@ -129,7 +128,8 @@ const Index = () => {
         if (lotteries && lotteries.length > 0) {
           lotteries = lotteries.map(lottery => {
             // 使用时间工具函数判断是否已结束
-            const isEnded = isTimeExpired(normalizeTimeString(lottery.endTimeLocal || lottery.endTime));
+            const endTime = lottery.endTimeLocal || lottery.endTime;
+            const isEnded = isExpired(endTime);  // 修改: 使用 isExpired 代替 isTimeExpired
             return {
               ...lottery,
               isEnded
