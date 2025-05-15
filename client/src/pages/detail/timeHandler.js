@@ -1,4 +1,4 @@
-// client/src/pages/detail/timeHandler.js (修复版)
+// client/src/pages/detail/timeHandler.js (修改版)
 import {
   formatChineseTime,
   getCountdownString,
@@ -24,7 +24,7 @@ export const startCountdownTimer = (
   }
 
   try {
-    // 格式化结束时间，去除Z后缀
+    // 格式化结束时间，确保没有Z后缀
     const formattedEndTime = formatTime(endTime);
     console.log("格式化后的结束时间:", formattedEndTime);
 
@@ -68,7 +68,6 @@ export const startCountdownTimer = (
             console.log("再次尝试刷新以获取开奖结果");
             refreshingRef.current = false; // 重置刷新标志
 
-            // 传入lotteryId作为参数
             if (lotteryId) {
               fetchLotteryDetail(lotteryId);
             } else {
@@ -98,7 +97,6 @@ export const startCountdownTimer = (
 
         // 延迟几秒后再刷新，给自动开奖云函数时间执行
         setTimeout(() => {
-          // 传入lotteryId作为参数
           if (lotteryId) {
             fetchLotteryDetail(lotteryId);
           } else {
@@ -110,7 +108,6 @@ export const startCountdownTimer = (
             console.log("再次尝试获取开奖结果");
             refreshingRef.current = false; // 重置刷新标志
 
-            // 传入lotteryId作为参数
             if (lotteryId) {
               fetchLotteryDetail(lotteryId);
             } else {

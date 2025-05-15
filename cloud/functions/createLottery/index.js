@@ -1,4 +1,4 @@
-// cloud/functions/createLottery/index.js (修复版)
+// cloud/functions/createLottery/index.js (修改版)
 const cloud = require("wx-server-sdk");
 
 // 初始化云环境
@@ -10,20 +10,24 @@ const db = cloud.database();
 const lotteryCollection = db.collection("lotteries");
 const userCollection = db.collection("users");
 
-// 简化的时间处理函数
-const formatTime = (time) => {
+// 统一的时间处理函数
+function formatTime(time) {
 	if (!time) return "";
 	try {
-		let timeStr = time;
+		// 处理Date对象
 		if (time instanceof Date) {
-			timeStr = time.toISOString();
+			return time.toISOString().replace("Z", "");
 		}
-		return typeof timeStr === "string" ? timeStr.replace("Z", "") : "";
+		// 处理字符串
+		if (typeof time === "string") {
+			return time.replace("Z", "");
+		}
+		return String(time);
 	} catch (error) {
 		console.error("格式化时间出错:", error);
 		return "";
 	}
-};
+}
 
 // 主函数
 exports.main = async (event, context) => {
@@ -43,17 +47,18 @@ exports.main = async (event, context) => {
 		return { success: false, message: "奖品数量至少为1" };
 	}
 
-	// 规范化时间
+	// 统一格式化时间，确保不带Z后缀
 	const formattedStartTime = formatTime(startTime || new Date());
 	const formattedEndTime = formatTime(endTime);
 
 	console.log("格式化后的开始时间:", formattedStartTime);
 	console.log("格式化后的结束时间:", formattedEndTime);
 
-	// 验证开奖时间必须大于开始时间
+	// 创建Date对象用于比较
 	const startDateTime = new Date(formattedStartTime);
 	const endDateTime = new Date(formattedEndTime);
 
+	// 验证开奖时间必须大于开始时间
 	if (endDateTime <= startDateTime) {
 		return { success: false, message: "开奖时间必须大于开始时间" };
 	}
@@ -91,12 +96,13 @@ exports.main = async (event, context) => {
 		// 创建抽奖
 		const now = db.serverDate();
 
+		// 添加抽奖记录 - 使用统一格式的时间字符串
 		const result = await lotteryCollection.add({
 			data: {
 				title,
 				description: description || title,
-				startTime: startDateTime, // 存储Date对象用于查询
-				endTime: endDateTime, // 存储Date对象用于查询
+				startTime: formattedStartTime, // 存储格式化后的字符串
+				endTime: formattedEndTime, // 存储格式化后的字符串
 				prizeCount: parseInt(prizeCount),
 				_openid: wxContext.OPENID, // 统一使用_openid
 				createTime: now,

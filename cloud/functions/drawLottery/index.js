@@ -1,4 +1,4 @@
-// cloud/functions/drawLottery/index.js (修复版)
+// cloud/functions/drawLottery/index.js (修改版)
 const cloud = require("wx-server-sdk");
 
 // 初始化云环境
@@ -11,6 +11,25 @@ const _ = db.command;
 const lotteryCollection = db.collection("lotteries");
 const participantCollection = db.collection("participants");
 const userCollection = db.collection("users");
+
+// 统一的时间处理函数
+function formatTime(time) {
+	if (!time) return "";
+	try {
+		// 处理Date对象
+		if (time instanceof Date) {
+			return time.toISOString().replace("Z", "");
+		}
+		// 处理字符串
+		if (typeof time === "string") {
+			return time.replace("Z", "");
+		}
+		return String(time);
+	} catch (error) {
+		console.error("格式化时间出错:", error);
+		return "";
+	}
+}
 
 // 随机选择函数
 function getRandomItems(array, count) {
@@ -46,6 +65,18 @@ exports.main = async (event, context) => {
 
 		const lottery = lotteryResult.data;
 		console.log("抽奖信息:", lottery);
+
+		// 确保时间字段格式正确
+		if (
+			typeof lottery.startTime === "string" &&
+			lottery.startTime.includes("Z")
+		) {
+			lottery.startTime = formatTime(lottery.startTime);
+		}
+
+		if (typeof lottery.endTime === "string" && lottery.endTime.includes("Z")) {
+			lottery.endTime = formatTime(lottery.endTime);
+		}
 
 		// 检查抽奖是否已经开奖
 		if (lottery.hasDrawn) {
@@ -187,18 +218,14 @@ exports.main = async (event, context) => {
 			try {
 				// 更新中奖者状态
 				if (winnerIds.length > 0) {
-					await participantCollection
-						.where({
-							_id: _.in(winnerIds),
-						})
-						.update({
+					for (const winnerId of winnerIds) {
+						await participantCollection.doc(winnerId).update({
 							data: {
 								isWinner: true,
 								updateTime: db.serverDate(),
 							},
 						});
-
-					console.log(`已直接更新中奖者状态`);
+					}
 				}
 
 				// 更新抽奖信息

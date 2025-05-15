@@ -1,4 +1,4 @@
-// cloud/functions/getLotteryList/index.js - 内联时间工具函数版本
+// cloud/functions/getLotteryList/index.js (修改版)
 const cloud = require("wx-server-sdk");
 
 // 初始化云环境
@@ -11,35 +11,38 @@ const db = cloud.database();
 const _ = db.command;
 const lotteryCollection = db.collection("lotteries");
 
-// 内联时间工具函数
-function normalizeTimeString(timeStr) {
-	if (!timeStr) return "";
+// 统一的时间处理函数
+function formatTime(time) {
+	if (!time) return "";
 	try {
-		// 如果是日期对象，先转为ISO字符串
-		if (timeStr instanceof Date) {
-			timeStr = timeStr.toISOString();
+		// 处理Date对象
+		if (time instanceof Date) {
+			return time.toISOString().replace("Z", "");
 		}
-		// 如果包含Z后缀，移除它以避免时区问题
-		if (typeof timeStr === "string" && timeStr.includes("Z")) {
-			return timeStr.replace("Z", "");
+		// 处理字符串
+		if (typeof time === "string") {
+			return time.replace("Z", "");
 		}
-		return timeStr;
+		return String(time);
 	} catch (error) {
-		console.error("标准化时间字符串出错:", error);
-		return timeStr;
+		console.error("格式化时间出错:", error);
+		return "";
 	}
 }
 
-function isTimeExpired(timeStr) {
-	if (!timeStr) return false;
+// 判断时间是否已过期
+function isExpired(time) {
+	if (!time) return false;
 	try {
-		const targetTime = new Date(normalizeTimeString(timeStr));
+		const formattedTime = formatTime(time);
+		const targetTime = new Date(formattedTime);
 		const now = new Date();
-		// 检查日期是否有效
+
 		if (isNaN(targetTime.getTime())) {
-			console.error("无效的时间:", timeStr);
+			console.error("无效的时间:", time);
 			return false;
 		}
+
 		return now >= targetTime;
 	} catch (error) {
 		console.error("判断时间是否过期出错:", error);
@@ -54,7 +57,7 @@ exports.main = async (event, context) => {
 	const skip = (page - 1) * limit;
 
 	try {
-		// 查询列表 - 不再使用status过滤，而是通过时间判断
+		// 查询列表
 		let query = lotteryCollection;
 
 		// 尝试获取总数
@@ -72,10 +75,33 @@ exports.main = async (event, context) => {
 		let lotteriesWithCreator = lotteries;
 
 		if (lotteries.length > 0) {
+			// 确保每个抽奖记录的时间字段正确
+			lotteriesWithCreator = lotteriesWithCreator.map((lottery) => {
+				let updatedLottery = { ...lottery };
+
+				// 处理时间格式
+				if (
+					typeof updatedLottery.startTime === "string" &&
+					updatedLottery.startTime.includes("Z")
+				) {
+					updatedLottery.startTime = formatTime(updatedLottery.startTime);
+				}
+
+				if (
+					typeof updatedLottery.endTime === "string" &&
+					updatedLottery.endTime.includes("Z")
+				) {
+					updatedLottery.endTime = formatTime(updatedLottery.endTime);
+				}
+
+				return updatedLottery;
+			});
+
+			// 获取创建者信息
 			const creatorIds = [
 				...new Set(
 					lotteriesWithCreator
-						.map((lottery) => lottery.creatorId)
+						.map((lottery) => lottery._openid)
 						.filter((id) => id)
 				),
 			];
@@ -102,20 +128,11 @@ exports.main = async (event, context) => {
 				creatorsMap[creator._openid] = creator;
 			});
 
-			// 当前时间
-			const now = new Date();
-
 			// 组合数据，并添加isEnded标志
 			lotteriesWithCreator = lotteriesWithCreator.map((lottery) => {
-				// 判断是否已结束 - 使用内联函数判断
-				let isEnded = false;
-				try {
-					isEnded = isTimeExpired(lottery.endTimeLocal || lottery.endTime);
-					console.log(`抽奖ID: ${lottery._id} 是否已结束: ${isEnded}`);
-				} catch (error) {
-					console.error(`判断抽奖ID: ${lottery._id} 是否结束时出错:`, error);
-					console.error("结束时间:", lottery.endTimeLocal || lottery.endTime);
-				}
+				// 判断是否已结束 - 使用统一函数
+				let isEnded = isExpired(lottery.endTime);
+				console.log(`抽奖ID: ${lottery._id} 是否已结束: ${isEnded}`);
 
 				// 构建返回结果
 				const result = {
@@ -124,11 +141,31 @@ exports.main = async (event, context) => {
 				};
 
 				// 添加创建者信息
-				if (lottery.creatorId && creatorsMap[lottery.creatorId]) {
-					result.creator = creatorsMap[lottery.creatorId];
+				if (lottery._openid && creatorsMap[lottery._openid]) {
+					result.creator = creatorsMap[lottery._openid];
 				}
 
 				return result;
+			});
+
+			// 异步更新数据库中带Z后缀的时间格式，不等待结果
+			lotteriesWithCreator.forEach((lottery) => {
+				if (
+					typeof lottery.originalEndTime === "string" &&
+					lottery.originalEndTime.includes("Z")
+				) {
+					lotteryCollection
+						.doc(lottery._id)
+						.update({
+							data: {
+								endTime: formatTime(lottery.endTime),
+								startTime: formatTime(lottery.startTime),
+							},
+						})
+						.catch((err) =>
+							console.error(`更新抽奖 ${lottery._id} 时间格式失败:`, err)
+						);
+				}
 			});
 		}
 

@@ -1,4 +1,4 @@
-// client/src/utils/timeUtils.js (简化版)
+// client/src/utils/timeUtils.js (修改版)
 /**
  * 时间处理工具函数
  * 统一管理项目中的时间处理逻辑
@@ -12,11 +12,15 @@
 export const formatTime = (time) => {
   if (!time) return "";
   try {
-    let timeStr = time;
+    // 处理Date对象
     if (time instanceof Date) {
-      timeStr = time.toISOString();
+      return time.toISOString().replace("Z", "");
     }
-    return typeof timeStr === "string" ? timeStr.replace("Z", "") : "";
+    // 处理字符串
+    if (typeof time === "string") {
+      return time.replace("Z", "");
+    }
+    return String(time);
   } catch (error) {
     console.error("格式化时间出错:", error);
     return "";
@@ -31,8 +35,16 @@ export const formatTime = (time) => {
 export const isExpired = (time) => {
   if (!time) return false;
   try {
-    const targetTime = new Date(formatTime(time));
-    return new Date() >= targetTime;
+    const formattedTime = formatTime(time);
+    const targetTime = new Date(formattedTime);
+    const now = new Date();
+
+    if (isNaN(targetTime.getTime())) {
+      console.error("无效的时间:", time);
+      return false;
+    }
+
+    return now >= targetTime;
   } catch (error) {
     console.error("判断过期出错:", error);
     return false;
@@ -55,8 +67,13 @@ export const getNowString = () => {
 export const formatChineseTime = (time) => {
   if (!time) return "";
   try {
-    const date = new Date(formatTime(time));
-    if (isNaN(date.getTime())) return "";
+    const formattedTime = formatTime(time);
+    const date = new Date(formattedTime);
+
+    if (isNaN(date.getTime())) {
+      console.error("无效的时间:", time);
+      return "";
+    }
 
     return date
       .toLocaleString("zh-CN", {
@@ -83,8 +100,13 @@ export const formatChineseTime = (time) => {
 export const formatShortChineseTime = (time) => {
   if (!time) return "";
   try {
-    const date = new Date(formatTime(time));
-    if (isNaN(date.getTime())) return "";
+    const formattedTime = formatTime(time);
+    const date = new Date(formattedTime);
+
+    if (isNaN(date.getTime())) {
+      console.error("无效的时间:", time);
+      return "";
+    }
 
     return date
       .toLocaleString("zh-CN", {
@@ -109,7 +131,8 @@ export const formatShortChineseTime = (time) => {
 export const getCountdownString = (endTime) => {
   if (!endTime) return "00:00:00";
   try {
-    const end = new Date(formatTime(endTime));
+    const formattedEndTime = formatTime(endTime);
+    const end = new Date(formattedEndTime);
     const now = new Date();
 
     if (isNaN(end.getTime()) || now >= end) {
@@ -141,12 +164,14 @@ export const getCountdownString = (endTime) => {
  */
 export const combineDateTime = (date, time) => {
   try {
+    // 确保时间格式包含秒
     const timeFormat = time.includes(":")
       ? time.split(":").length === 2
         ? `${time}:00`
         : time
       : `${time}:00`;
 
+    // 组合日期和时间，确保不带Z后缀
     return `${date}T${timeFormat}`;
   } catch (error) {
     console.error("组合日期时间出错:", error);
