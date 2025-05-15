@@ -1,4 +1,4 @@
-// client/src/pages/detail/renderUtils.js - 修复版，统一使用_openid
+// client/src/pages/detail/renderUtils.js (修复版)
 import React from "react";
 import { View, Text, Image } from "@tarojs/components";
 
@@ -16,7 +16,7 @@ export const renderWinners = (
   }
 
   // 判断抽奖是否已结束
-  const ended = isLotteryEnded(lotteryInfo.endTimeLocal || lotteryInfo.endTime);
+  const ended = isLotteryEnded(lotteryInfo.endTime);
 
   if (!ended) {
     console.log("抽奖未结束，不显示中奖名单");

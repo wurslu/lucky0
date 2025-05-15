@@ -1,4 +1,4 @@
-// cloud/functions/createLottery/index.js - 内联时间工具函数版本
+// cloud/functions/createLottery/index.js (修复版)
 const cloud = require("wx-server-sdk");
 
 // 初始化云环境
@@ -10,34 +10,20 @@ const db = cloud.database();
 const lotteryCollection = db.collection("lotteries");
 const userCollection = db.collection("users");
 
-// 内联时间工具函数
-function normalizeTimeString(timeStr) {
-	if (!timeStr) return "";
+// 简化的时间处理函数
+const formatTime = (time) => {
+	if (!time) return "";
 	try {
-		// 如果是日期对象，先转为ISO字符串
-		if (timeStr instanceof Date) {
-			timeStr = timeStr.toISOString();
+		let timeStr = time;
+		if (time instanceof Date) {
+			timeStr = time.toISOString();
 		}
-		// 如果包含Z后缀，移除它以避免时区问题
-		if (typeof timeStr === "string" && timeStr.includes("Z")) {
-			return timeStr.replace("Z", "");
-		}
-		return timeStr;
+		return typeof timeStr === "string" ? timeStr.replace("Z", "") : "";
 	} catch (error) {
-		console.error("标准化时间字符串出错:", error);
-		return timeStr;
+		console.error("格式化时间出错:", error);
+		return "";
 	}
-}
-
-function getCurrentStandardTime() {
-	try {
-		const now = new Date();
-		return now.toISOString().replace("Z", "");
-	} catch (error) {
-		console.error("获取当前标准时间出错:", error);
-		return new Date().toISOString();
-	}
-}
+};
 
 // 主函数
 exports.main = async (event, context) => {
@@ -57,21 +43,16 @@ exports.main = async (event, context) => {
 		return { success: false, message: "奖品数量至少为1" };
 	}
 
-	// 规范化时间字符串，确保没有时区问题
-	const normalizedStartTime = normalizeTimeString(
-		startTime || getCurrentStandardTime()
-	);
-	const normalizedEndTime = normalizeTimeString(endTime);
+	// 规范化时间
+	const formattedStartTime = formatTime(startTime || new Date());
+	const formattedEndTime = formatTime(endTime);
 
-	console.log("规范化后的开始时间:", normalizedStartTime);
-	console.log("规范化后的结束时间:", normalizedEndTime);
+	console.log("格式化后的开始时间:", formattedStartTime);
+	console.log("格式化后的结束时间:", formattedEndTime);
 
 	// 验证开奖时间必须大于开始时间
-	const startDateTime = new Date(normalizedStartTime);
-	const endDateTime = new Date(normalizedEndTime);
-
-	console.log("开始时间Date:", startDateTime);
-	console.log("结束时间Date:", endDateTime);
+	const startDateTime = new Date(formattedStartTime);
+	const endDateTime = new Date(formattedEndTime);
 
 	if (endDateTime <= startDateTime) {
 		return { success: false, message: "开奖时间必须大于开始时间" };
@@ -80,7 +61,7 @@ exports.main = async (event, context) => {
 	try {
 		console.log("当前用户OPENID:", wxContext.OPENID);
 
-		// 检查用户权限 - 只使用_openid字段
+		// 检查用户权限
 		const userResult = await userCollection
 			.where({
 				_openid: wxContext.OPENID,
@@ -114,17 +95,13 @@ exports.main = async (event, context) => {
 			data: {
 				title,
 				description: description || title,
-				// 存储原始时间字符串，避免Date对象自动转换为UTC
-				startTimeLocal: normalizedStartTime,
-				endTimeLocal: normalizedEndTime,
-				// 也存储Date对象用于查询
-				startTime: startDateTime,
-				endTime: endDateTime,
+				startTime: startDateTime, // 存储Date对象用于查询
+				endTime: endDateTime, // 存储Date对象用于查询
 				prizeCount: parseInt(prizeCount),
-				creatorId: wxContext.OPENID,
-				_openid: wxContext.OPENID, // 只使用_openid
+				_openid: wxContext.OPENID, // 统一使用_openid
 				createTime: now,
 				updateTime: now,
+				hasDrawn: false,
 			},
 		});
 

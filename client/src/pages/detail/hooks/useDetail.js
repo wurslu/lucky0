@@ -1,4 +1,4 @@
-// client/src/pages/detail/hooks/useDetail.js - 修复版，统一使用_openid (续)
+// client/src/pages/detail/hooks/useDetail.js (修复版)
 import { useState, useEffect, useRef } from "react";
 import Taro from "@tarojs/taro";
 import {
@@ -10,8 +10,9 @@ import {
 import {
   formatChineseTime,
   formatShortChineseTime,
-  isTimeExpired,
-  normalizeTimeString,
+  isExpired,
+  formatTime,
+  getCountdownString,
 } from "../../../utils/timeUtils";
 import { startCountdownTimer } from "../timeHandler";
 
@@ -38,10 +39,9 @@ export function useDetail() {
 
   const isUserWinner = () => {
     if (!userInfo || !lotteryInfo || !lotteryInfo.winners) return false;
-
-    // 统一使用_openid
-    const userOpenid = userInfo._openid;
-    return lotteryInfo.winners.some((winner) => winner._openid === userOpenid);
+    return lotteryInfo.winners.some(
+      (winner) => winner._openid === userInfo._openid
+    );
   };
 
   useEffect(() => {
@@ -97,15 +97,15 @@ export function useDetail() {
   }, []);
 
   // 判断抽奖是否已结束 - 仅基于时间判断
-  const isLotteryEnded = (endTimeStr) => {
-    if (!endTimeStr) return false;
-    return isTimeExpired(normalizeTimeString(endTimeStr));
+  const isLotteryEnded = (endTime) => {
+    if (!endTime) return false;
+    return isExpired(endTime);
   };
 
   // 开始倒计时
-  const startCountdown = (endTimeStr) => {
+  const startCountdown = (endTime) => {
     return startCountdownTimer(
-      endTimeStr,
+      endTime,
       countdownTimer,
       setCountdownTimer,
       setCountdown,
@@ -162,16 +162,12 @@ export function useDetail() {
         // 更新抽奖信息
         setLotteryInfo(result.data);
 
-        // 检查当前用户是否是创建者 - 统一使用_openid
-        if (
-          userInfo &&
-          (result.data.creatorId === userInfo._openid ||
-            result.data._openid === userInfo._openid)
-        ) {
+        // 检查当前用户是否是创建者 - 使用_openid
+        if (userInfo && result.data._openid === userInfo._openid) {
           setIsCreator(true);
         }
 
-        // 检查当前用户是否已参与 - 统一使用_openid
+        // 检查当前用户是否已参与 - 使用_openid
         if (userInfo && result.data.participants) {
           const hasJoined = result.data.participants.some(
             (p) => p._openid === userInfo._openid
@@ -188,9 +184,8 @@ export function useDetail() {
         const isNoParticipants =
           result.data.noParticipants && result.data.hasDrawn;
 
-        // 使用修正后的时间工具判断抽奖是否已结束
-        const endTime = result.data.endTimeLocal || result.data.endTime;
-        const ended = isTimeExpired(normalizeTimeString(endTime));
+        // 判断抽奖是否已结束
+        const ended = isExpired(result.data.endTime);
 
         // 如果已开奖或无人参与，停止倒计时
         if (isAlreadyDrawn || isNoParticipants) {
@@ -201,7 +196,7 @@ export function useDetail() {
           setCountdown("00:00:00");
         } else if (!ended) {
           // 抽奖未结束且未开奖，设置倒计时
-          startCountdown(endTime);
+          startCountdown(result.data.endTime);
         } else {
           // 抽奖已结束但未开奖，清除定时器
           if (countdownTimer) {
@@ -243,7 +238,7 @@ export function useDetail() {
     }
   };
 
-  // 处理微信登录并参与抽奖 - 云函数版本
+  // 处理微信登录并参与抽奖
   const handleLoginAndJoin = async () => {
     try {
       Taro.showLoading({ title: "登录中..." });
@@ -290,10 +285,7 @@ export function useDetail() {
     }
 
     // 检查抽奖是否已结束
-    if (
-      lotteryInfo &&
-      isLotteryEnded(lotteryInfo.endTimeLocal || lotteryInfo.endTime)
-    ) {
+    if (lotteryInfo && isLotteryEnded(lotteryInfo.endTime)) {
       Taro.showToast({
         title: "抽奖已结束，无法参与",
         icon: "none",
@@ -439,7 +431,7 @@ export function useDetail() {
       "https://mmbiz.qlogo.cn/mmbiz/icTdbqWNOwNRna42FI242Lcia07jQodd2FJGIYQfG0LAJGFxM4FbnQP6yfMxBgJ0F3YRqJCJ1aPAK2dQagdusBZg/0";
   };
 
-  // 手动刷新按钮 - 增强版
+  // 手动刷新按钮
   const handleManualRefresh = () => {
     if (!refreshingRef.current) {
       Taro.showLoading({
@@ -450,7 +442,7 @@ export function useDetail() {
       // 设置刷新标志
       refreshingRef.current = true;
 
-      // 强制刷新 - 添加force参数
+      // 强制刷新
       fetchLotteryDetail(lotteryId, true);
 
       // 延迟关闭加载提示
@@ -489,12 +481,12 @@ export function useDetail() {
     },
   };
 
-  // 判断抽奖是否正在进行中 - 基于时间和开奖状态
+  // 判断抽奖是否正在进行中
   const isActive = () => {
     if (!lotteryInfo) return false;
 
     return (
-      !isLotteryEnded(lotteryInfo.endTimeLocal || lotteryInfo.endTime) &&
+      !isLotteryEnded(lotteryInfo.endTime) &&
       !lotteryInfo.hasDrawn &&
       !lotteryInfo.noParticipants
     );

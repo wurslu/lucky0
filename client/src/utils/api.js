@@ -1,5 +1,6 @@
-// client/src/utils/api.js - 修复版，统一使用_openid
+// client/src/utils/api.js (修复版)
 import Taro from "@tarojs/taro";
+import { formatTime, isExpired } from "./timeUtils";
 
 // 获取微信登录凭证
 export const getWxLoginCode = async () => {
@@ -126,8 +127,7 @@ export const getLotteryList = async (params = {}) => {
     ) {
       const now = new Date();
       result.data.lotteries = result.data.lotteries.map((lottery) => {
-        const endTime = new Date(lottery.endTimeLocal || lottery.endTime);
-        const isEnded = now >= endTime;
+        const isEnded = isExpired(lottery.endTime);
         return {
           ...lottery,
           isEnded: isEnded,
@@ -236,44 +236,15 @@ export const drawLottery = async (id) => {
   }
 };
 
-// 用户登录 - 云函数版本 (用户名密码方式)
-export const login = async (username, password) => {
-  try {
-    const { result } = await Taro.cloud.callFunction({
-      name: "userLogin",
-      data: { username, password },
-    });
-
-    if (result && result.success) {
-      // 存储用户信息
-      Taro.setStorageSync("userInfo", result.data);
-      return { success: true, data: { user: result.data } };
-    } else {
-      return { success: false, message: result?.message || "登录失败" };
-    }
-  } catch (error) {
-    console.error("登录失败:", error);
-    return { success: false, message: "登录失败，请重试" };
-  }
-};
-
-// 用户注册 - 云函数版本
-export const register = async (userData) => {
-  try {
-    const { result } = await Taro.cloud.callFunction({
-      name: "userRegister",
-      data: userData,
-    });
-
-    if (result && result.success) {
-      // 存储用户信息
-      Taro.setStorageSync("userInfo", result.data);
-      return { success: true, data: { user: result.data } };
-    } else {
-      return { success: false, message: result?.message || "注册失败" };
-    }
-  } catch (error) {
-    console.error("注册失败:", error);
-    return { success: false, message: "注册失败，请重试" };
-  }
+// 导出所有API函数
+export default {
+  getWxLoginCode,
+  completeWxLogin,
+  checkLoginStatus,
+  getUserInfo,
+  getLotteryList,
+  getLotteryDetail,
+  createLottery,
+  joinLottery,
+  drawLottery,
 };

@@ -1,28 +1,63 @@
-// client/src/utils/timeUtils.js
+// client/src/utils/timeUtils.js (简化版)
 /**
  * 时间处理工具函数
- * 统一管理项目中的时间处理逻辑，解决时区问题
+ * 统一管理项目中的时间处理逻辑
  */
 
 /**
- * 将时间字符串转换为标准中国时间格式
- * @param {string|Date} timeStr 时间字符串或Date对象
- * @returns {string} 格式化后的中国时间字符串 (YYYY-MM-DD HH:mm:ss)
+ * 格式化时间字符串，移除Z后缀
+ * @param {string|Date} time 时间字符串或Date对象
+ * @returns {string} 处理后的时间字符串
  */
-export const formatChineseTime = (timeStr) => {
-  if (!timeStr) return "";
-
+export const formatTime = (time) => {
+  if (!time) return "";
   try {
-    // 创建日期对象
-    const date = new Date(timeStr);
-
-    // 检查日期是否有效
-    if (isNaN(date.getTime())) {
-      console.error("无效的时间字符串:", timeStr);
-      return "";
+    let timeStr = time;
+    if (time instanceof Date) {
+      timeStr = time.toISOString();
     }
+    return typeof timeStr === "string" ? timeStr.replace("Z", "") : "";
+  } catch (error) {
+    console.error("格式化时间出错:", error);
+    return "";
+  }
+};
 
-    // 使用toLocaleString生成中国时间格式
+/**
+ * 判断时间是否已过期
+ * @param {string|Date} time 时间字符串或Date对象
+ * @returns {boolean} 是否已过期
+ */
+export const isExpired = (time) => {
+  if (!time) return false;
+  try {
+    const targetTime = new Date(formatTime(time));
+    return new Date() >= targetTime;
+  } catch (error) {
+    console.error("判断过期出错:", error);
+    return false;
+  }
+};
+
+/**
+ * 获取当前时间字符串 (不带Z后缀)
+ * @returns {string} 当前时间字符串
+ */
+export const getNowString = () => {
+  return new Date().toISOString().replace("Z", "");
+};
+
+/**
+ * 将时间字符串转换为中国标准时间格式
+ * @param {string|Date} time 时间字符串或Date对象
+ * @returns {string} 中国时间格式字符串 (YYYY-MM-DD HH:mm:ss)
+ */
+export const formatChineseTime = (time) => {
+  if (!time) return "";
+  try {
+    const date = new Date(formatTime(time));
+    if (isNaN(date.getTime())) return "";
+
     return date
       .toLocaleString("zh-CN", {
         year: "numeric",
@@ -41,19 +76,15 @@ export const formatChineseTime = (timeStr) => {
 };
 
 /**
- * 生成简短的中国时间格式 (不含年份和秒)
- * @param {string|Date} timeStr 时间字符串或Date对象
- * @returns {string} 简短的中国时间字符串 (MM-DD HH:mm)
+ * 简短的中国时间格式
+ * @param {string|Date} time 时间字符串或Date对象
+ * @returns {string} 简短格式 (MM-DD HH:mm)
  */
-export const formatShortChineseTime = (timeStr) => {
-  if (!timeStr) return "";
-
+export const formatShortChineseTime = (time) => {
+  if (!time) return "";
   try {
-    const date = new Date(timeStr);
-
-    if (isNaN(date.getTime())) {
-      return "";
-    }
+    const date = new Date(formatTime(time));
+    if (isNaN(date.getTime())) return "";
 
     return date
       .toLocaleString("zh-CN", {
@@ -71,56 +102,26 @@ export const formatShortChineseTime = (timeStr) => {
 };
 
 /**
- * 判断时间是否已过期
- * @param {string|Date} timeStr 时间字符串或Date对象
- * @returns {boolean} 是否已过期
- */
-export const isTimeExpired = (timeStr) => {
-  if (!timeStr) return false;
-
-  try {
-    const targetTime = new Date(timeStr);
-    const now = new Date();
-
-    return now >= targetTime;
-  } catch (error) {
-    console.error("判断时间是否过期出错:", error);
-    return false;
-  }
-};
-
-/**
  * 获取倒计时字符串
- * @param {string|Date} endTimeStr 结束时间字符串或Date对象
- * @returns {string} 倒计时字符串 (DD天 HH:mm:ss 或 HH:mm:ss)
+ * @param {string|Date} endTime 结束时间
+ * @returns {string} 倒计时字符串
  */
-export const getCountdownString = (endTimeStr) => {
-  if (!endTimeStr) return "00:00:00";
-
+export const getCountdownString = (endTime) => {
+  if (!endTime) return "00:00:00";
   try {
-    const endTime = new Date(endTimeStr);
+    const end = new Date(formatTime(endTime));
     const now = new Date();
 
-    // 检查是否有效
-    if (isNaN(endTime.getTime())) {
+    if (isNaN(end.getTime()) || now >= end) {
       return "00:00:00";
     }
 
-    // 如果已过期
-    if (now >= endTime) {
-      return "00:00:00";
-    }
-
-    // 计算时间差
-    const diff = endTime - now;
-
-    // 计算天、时、分、秒
+    const diff = end - now;
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
     const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
     const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
     const seconds = Math.floor((diff % (1000 * 60)) / 1000);
 
-    // 格式化输出
     return `${days > 0 ? `${days}天 ` : ""}${hours
       .toString()
       .padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${seconds
@@ -133,42 +134,28 @@ export const getCountdownString = (endTimeStr) => {
 };
 
 /**
- * 获取当前时间的ISO字符串（移除Z后缀）
- * @returns {string} 当前时间的ISO字符串，不含Z后缀
+ * 将日期和时间组合成标准格式
+ * @param {string} date 日期字符串 (YYYY-MM-DD)
+ * @param {string} time 时间字符串 (HH:mm)
+ * @returns {string} 组合后的时间字符串
  */
-export const getCurrentISOString = () => {
+export const combineDateTime = (date, time) => {
   try {
-    const now = new Date();
-    // 移除Z后缀以避免时区问题
-    return now.toISOString().replace("Z", "");
+    const timeFormat = time.includes(":")
+      ? time.split(":").length === 2
+        ? `${time}:00`
+        : time
+      : `${time}:00`;
+
+    return `${date}T${timeFormat}`;
   } catch (error) {
-    console.error("获取当前ISO字符串出错:", error);
-    return new Date().toISOString();
+    console.error("组合日期时间出错:", error);
+    return "";
   }
 };
 
 /**
- * 标准化时间字符串，去除Z后缀
- * @param {string} timeStr 时间字符串
- * @returns {string} 标准化后的时间字符串
- */
-export const normalizeTimeString = (timeStr) => {
-  if (!timeStr) return "";
-
-  try {
-    if (typeof timeStr === "string" && timeStr.includes("Z")) {
-      // 移除Z后缀以避免时区问题
-      return timeStr.replace("Z", "");
-    }
-    return timeStr;
-  } catch (error) {
-    console.error("标准化时间字符串出错:", error);
-    return timeStr;
-  }
-};
-
-/**
- * 获取未来某个时间点
+ * 获取未来时间
  * @param {number} minutesToAdd 要添加的分钟数
  * @returns {object} 包含date和time的对象
  */
@@ -186,36 +173,14 @@ export const getFutureDateTime = (minutesToAdd) => {
   }
 };
 
-/**
- * 将日期和时间组合成ISO格式的字符串 (不带Z后缀)
- * @param {string} date 日期字符串 (YYYY-MM-DD)
- * @param {string} time 时间字符串 (HH:mm 或 HH:mm:ss)
- * @returns {string} 组合后的ISO格式字符串
- */
-export const combineDateTimeToISO = (date, time) => {
-  try {
-    // 确保时间格式统一
-    const formattedTime = time.includes(":")
-      ? time.split(":").length === 2
-        ? `${time}:00`
-        : time
-      : `${time}:00`;
-
-    // 组合日期和时间
-    return `${date}T${formattedTime}`;
-  } catch (error) {
-    console.error("组合日期和时间出错:", error);
-    return "";
-  }
-};
-
+// 导出所有函数
 export default {
+  formatTime,
+  isExpired,
+  getNowString,
   formatChineseTime,
   formatShortChineseTime,
-  isTimeExpired,
   getCountdownString,
-  getCurrentISOString,
-  normalizeTimeString,
+  combineDateTime,
   getFutureDateTime,
-  combineDateTimeToISO,
 };

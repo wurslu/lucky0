@@ -1,4 +1,4 @@
-// client/src/pages/detail/components/WinningStatus.jsx - 修复版，统一使用_openid
+// client/src/pages/detail/components/WinningStatus.jsx (修复版)
 import React from 'react';
 import { View, Text, Button, Image } from '@tarojs/components';
 
@@ -40,7 +40,7 @@ const WinningStatus = ({
     );
   }
 
-  // 检查当前用户是否中奖 - 统一使用_openid
+  // 检查当前用户是否中奖
   const userOpenid = userInfo._openid;
   const isWinner = lotteryInfo.winners && lotteryInfo.winners.some(
     winner => winner._openid === userOpenid

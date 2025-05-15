@@ -1,4 +1,4 @@
-// cloud/functions/drawLottery/index.js - 内联时间工具函数版本
+// cloud/functions/drawLottery/index.js (修复版)
 const cloud = require("wx-server-sdk");
 
 // 初始化云环境
@@ -76,9 +76,7 @@ exports.main = async (event, context) => {
 		console.log("当前用户信息:", user);
 
 		// 检查是否是创建者或管理员
-		const isCreator =
-			lottery.creatorId === wxContext.OPENID ||
-			lottery._openid === wxContext.OPENID;
+		const isCreator = lottery._openid === wxContext.OPENID;
 
 		if (!isCreator && !user.isAdmin) {
 			return {
@@ -124,7 +122,7 @@ exports.main = async (event, context) => {
 			};
 		}
 
-		// 确定中奖人数（不超过参与人数和设置的奖品数量）
+		// 确定中奖人数
 		const winnerCount = Math.min(lottery.prizeCount || 1, participants.length);
 		console.log("中奖人数:", winnerCount);
 
@@ -132,7 +130,6 @@ exports.main = async (event, context) => {
 		const winners = getRandomItems(participants, winnerCount);
 		const winnerIds = winners.map((w) => w._id);
 		console.log("中奖者ID:", winnerIds);
-		console.log("中奖者详情:", JSON.stringify(winners));
 
 		let updateSuccess = false;
 		let detailedWinners = [];
@@ -144,19 +141,19 @@ exports.main = async (event, context) => {
 			try {
 				// 更新中奖者状态
 				if (winnerIds.length > 0) {
-					for (const winnerId of winnerIds) {
-						await transaction
-							.collection("participants")
-							.doc(winnerId)
-							.update({
-								data: {
-									isWinner: true,
-									updateTime: db.serverDate(),
-								},
-							});
+					await transaction
+						.collection("participants")
+						.where({
+							_id: _.in(winnerIds),
+						})
+						.update({
+							data: {
+								isWinner: true,
+								updateTime: db.serverDate(),
+							},
+						});
 
-						console.log(`已更新中奖者 ${winnerId} 状态`);
-					}
+					console.log(`已更新中奖者状态`);
 				}
 
 				// 更新抽奖信息
@@ -190,16 +187,18 @@ exports.main = async (event, context) => {
 			try {
 				// 更新中奖者状态
 				if (winnerIds.length > 0) {
-					for (const winnerId of winnerIds) {
-						await participantCollection.doc(winnerId).update({
+					await participantCollection
+						.where({
+							_id: _.in(winnerIds),
+						})
+						.update({
 							data: {
 								isWinner: true,
 								updateTime: db.serverDate(),
 							},
 						});
 
-						console.log(`已直接更新中奖者 ${winnerId} 状态`);
-					}
+					console.log(`已直接更新中奖者状态`);
 				}
 
 				// 更新抽奖信息
@@ -224,41 +223,44 @@ exports.main = async (event, context) => {
 		// 确认更新成功后，查询中奖者详细信息用于返回
 		if (updateSuccess) {
 			try {
-				// 查询每个中奖者的详细信息
-				for (const winner of winners) {
-					try {
-						// 查询用户信息
-						const userDetail = await userCollection
-							.where({
-								_openid: winner._openid,
-							})
-							.get();
+				// 获取中奖者的openid列表
+				const winnerOpenIds = winners.map((w) => w._openid).filter((id) => id);
 
-						if (userDetail.data && userDetail.data.length > 0) {
-							detailedWinners.push({
-								...winner,
-								nickName: userDetail.data[0].nickName,
-								avatarUrl: userDetail.data[0].avatarUrl,
-								isWinner: true,
-							});
-						} else {
-							detailedWinners.push({
-								...winner,
-								isWinner: true,
-							});
-						}
-					} catch (error) {
-						console.error("获取中奖者详情失败:", error);
-						// 如果获取详情失败，至少返回原始中奖者信息
-						detailedWinners.push({
-							...winner,
-							isWinner: true,
+				// 查询用户信息
+				if (winnerOpenIds.length > 0) {
+					const userDetails = await userCollection
+						.where({
+							_openid: _.in(winnerOpenIds),
+						})
+						.get();
+
+					// 创建用户信息映射
+					const userMap = {};
+					if (userDetails.data && userDetails.data.length > 0) {
+						userDetails.data.forEach((user) => {
+							if (user._openid) {
+								userMap[user._openid] = user;
+							}
 						});
 					}
+
+					// 合并中奖者和用户信息
+					detailedWinners = winners.map((winner) => {
+						const userInfo = userMap[winner._openid] || {};
+						return {
+							...winner,
+							nickName: userInfo.nickName,
+							avatarUrl: userInfo.avatarUrl,
+							isWinner: true,
+						};
+					});
+				} else {
+					// 如果无法获取详情，使用原始中奖者信息
+					detailedWinners = winners.map((w) => ({ ...w, isWinner: true }));
 				}
 			} catch (error) {
 				console.error("获取中奖者详情失败:", error);
-				// 如果获取详情失败，至少返回原始中奖者信息
+				// 如果获取详情失败，至少返回基本中奖者信息
 				detailedWinners = winners.map((w) => ({ ...w, isWinner: true }));
 			}
 		}

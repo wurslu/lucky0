@@ -1,22 +1,22 @@
-// client/src/pages/detail/timeHandler.js - 修正版
+// client/src/pages/detail/timeHandler.js (修复版)
 import {
   formatChineseTime,
   getCountdownString,
-  normalizeTimeString,
+  formatTime,
 } from "../../utils/timeUtils";
 
 /**
  * 处理倒计时逻辑
  */
 export const startCountdownTimer = (
-  endTimeStr,
+  endTime,
   countdownTimer,
   setCountdownTimer,
   setCountdown,
   initialLoadDoneRef,
   refreshingRef,
   fetchLotteryDetail,
-  lotteryId // 添加lotteryId参数
+  lotteryId
 ) => {
   // 清除可能存在的之前的定时器
   if (countdownTimer) {
@@ -24,26 +24,26 @@ export const startCountdownTimer = (
   }
 
   try {
-    // 规范化时间字符串，去除Z后缀
-    const normalizedEndTime = normalizeTimeString(endTimeStr);
-    console.log("标准化后的结束时间:", normalizedEndTime);
+    // 格式化结束时间，去除Z后缀
+    const formattedEndTime = formatTime(endTime);
+    console.log("格式化后的结束时间:", formattedEndTime);
 
     // 首先验证结束时间是否有效
-    const endTime = new Date(normalizedEndTime);
+    const endDateTime = new Date(formattedEndTime);
     const now = new Date();
 
     console.log("开始倒计时，当前时间:", formatChineseTime(now));
-    console.log("目标时间:", formatChineseTime(endTime));
+    console.log("目标时间:", formatChineseTime(endDateTime));
 
     // 检查日期是否有效
-    if (isNaN(endTime.getTime())) {
-      console.error("无效的结束时间:", normalizedEndTime);
+    if (isNaN(endDateTime.getTime())) {
+      console.error("无效的结束时间:", formattedEndTime);
       setCountdown("无效的时间");
       return;
     }
 
     // 如果结束时间已过，直接显示00:00:00
-    if (now >= endTime) {
+    if (now >= endDateTime) {
       console.log("结束时间已过，显示零时间");
       setCountdown("00:00:00");
 
@@ -56,7 +56,7 @@ export const startCountdownTimer = (
 
         // 设置延迟，确保不会立即刷新
         setTimeout(() => {
-          // 确保传入lotteryId作为参数
+          // 传入lotteryId作为参数
           if (lotteryId) {
             fetchLotteryDetail(lotteryId);
           } else {
@@ -68,7 +68,7 @@ export const startCountdownTimer = (
             console.log("再次尝试刷新以获取开奖结果");
             refreshingRef.current = false; // 重置刷新标志
 
-            // 确保传入lotteryId作为参数
+            // 传入lotteryId作为参数
             if (lotteryId) {
               fetchLotteryDetail(lotteryId);
             } else {
@@ -80,12 +80,12 @@ export const startCountdownTimer = (
       return;
     }
 
-    // 使用新的工具函数获取倒计时字符串
-    setCountdown(getCountdownString(normalizedEndTime));
+    // 使用工具函数获取倒计时字符串
+    setCountdown(getCountdownString(formattedEndTime));
 
     // 设置新的定时器 - 每秒更新一次
     const timer = setInterval(() => {
-      const countdown = getCountdownString(normalizedEndTime);
+      const countdown = getCountdownString(formattedEndTime);
       setCountdown(countdown);
 
       // 如果倒计时结束，清除定时器并刷新数据
@@ -98,7 +98,7 @@ export const startCountdownTimer = (
 
         // 延迟几秒后再刷新，给自动开奖云函数时间执行
         setTimeout(() => {
-          // 确保传入lotteryId作为参数
+          // 传入lotteryId作为参数
           if (lotteryId) {
             fetchLotteryDetail(lotteryId);
           } else {
@@ -110,7 +110,7 @@ export const startCountdownTimer = (
             console.log("再次尝试获取开奖结果");
             refreshingRef.current = false; // 重置刷新标志
 
-            // 确保传入lotteryId作为参数
+            // 传入lotteryId作为参数
             if (lotteryId) {
               fetchLotteryDetail(lotteryId);
             } else {

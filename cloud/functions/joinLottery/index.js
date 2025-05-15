@@ -1,4 +1,4 @@
-// cloud/functions/joinLottery/index.js - 内联时间工具函数版本
+// cloud/functions/joinLottery/index.js (修复版)
 const cloud = require("wx-server-sdk");
 
 // 初始化云环境
@@ -10,41 +10,24 @@ const db = cloud.database();
 const lotteryCollection = db.collection("lotteries");
 const participantCollection = db.collection("participants");
 
-// 内联时间工具函数
-function normalizeTimeString(timeStr) {
-	if (!timeStr) return "";
+// 简化的时间处理函数
+const isExpired = (time) => {
+	if (!time) return false;
 	try {
-		// 如果是日期对象，先转为ISO字符串
-		if (timeStr instanceof Date) {
-			timeStr = timeStr.toISOString();
+		let timeStr = time;
+		if (time instanceof Date) {
+			timeStr = time.toISOString();
 		}
-		// 如果包含Z后缀，移除它以避免时区问题
-		if (typeof timeStr === "string" && timeStr.includes("Z")) {
-			return timeStr.replace("Z", "");
+		if (typeof timeStr === "string") {
+			timeStr = timeStr.replace("Z", "");
 		}
-		return timeStr;
+		const targetTime = new Date(timeStr);
+		return new Date() >= targetTime;
 	} catch (error) {
-		console.error("标准化时间字符串出错:", error);
-		return timeStr;
-	}
-}
-
-function isTimeExpired(timeStr) {
-	if (!timeStr) return false;
-	try {
-		const targetTime = new Date(normalizeTimeString(timeStr));
-		const now = new Date();
-		// 检查日期是否有效
-		if (isNaN(targetTime.getTime())) {
-			console.error("无效的时间:", timeStr);
-			return false;
-		}
-		return now >= targetTime;
-	} catch (error) {
-		console.error("判断时间是否过期出错:", error);
+		console.error("判断过期出错:", error);
 		return false;
 	}
-}
+};
 
 // 主函数
 exports.main = async (event, context) => {
@@ -71,14 +54,8 @@ exports.main = async (event, context) => {
 
 		const lottery = lotteryResult.data;
 
-		// 调试信息
-		console.log("抽奖信息:", lottery);
-		console.log("结束时间:", lottery.endTime);
-		console.log("本地结束时间:", lottery.endTimeLocal);
-		console.log("当前时间:", new Date());
-
-		// 使用内联函数判断是否已过期
-		const isEnded = isTimeExpired(lottery.endTimeLocal || lottery.endTime);
+		// 检查是否已结束
+		const isEnded = isExpired(lottery.endTime);
 
 		if (isEnded) {
 			return {
@@ -87,7 +64,15 @@ exports.main = async (event, context) => {
 			};
 		}
 
-		// 检查是否已参与 - 统一使用_openid字段
+		// 检查是否已开奖
+		if (lottery.hasDrawn) {
+			return {
+				success: false,
+				message: "该抽奖已开奖，无法参与",
+			};
+		}
+
+		// 检查是否已参与
 		const participantResult = await participantCollection
 			.where({
 				lotteryId,
@@ -102,7 +87,7 @@ exports.main = async (event, context) => {
 			};
 		}
 
-		// 加入抽奖 - 使用_openid字段
+		// 加入抽奖
 		await participantCollection.add({
 			data: {
 				lotteryId,

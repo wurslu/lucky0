@@ -1,4 +1,4 @@
-// cloud/functions/autoDrawLottery/index.js - 内联时间工具函数版本
+// cloud/functions/autoDrawLottery/index.js (修复版)
 const cloud = require("wx-server-sdk");
 
 // 初始化云环境
@@ -11,41 +11,20 @@ const _ = db.command;
 const lotteryCollection = db.collection("lotteries");
 const participantCollection = db.collection("participants");
 
-// 内联时间工具函数
-function normalizeTimeString(timeStr) {
-	if (!timeStr) return "";
+// 简化的时间处理函数
+const formatTime = (time) => {
+	if (!time) return "";
 	try {
-		// 如果是日期对象，先转为ISO字符串
-		if (timeStr instanceof Date) {
-			timeStr = timeStr.toISOString();
+		let timeStr = time;
+		if (time instanceof Date) {
+			timeStr = time.toISOString();
 		}
-		// 如果包含Z后缀，移除它以避免时区问题
-		if (typeof timeStr === "string" && timeStr.includes("Z")) {
-			return timeStr.replace("Z", "");
-		}
-		return timeStr;
+		return typeof timeStr === "string" ? timeStr.replace("Z", "") : "";
 	} catch (error) {
-		console.error("标准化时间字符串出错:", error);
-		return timeStr;
+		console.error("格式化时间出错:", error);
+		return "";
 	}
-}
-
-function isTimeExpired(timeStr) {
-	if (!timeStr) return false;
-	try {
-		const targetTime = new Date(normalizeTimeString(timeStr));
-		const now = new Date();
-		// 检查日期是否有效
-		if (isNaN(targetTime.getTime())) {
-			console.error("无效的时间:", timeStr);
-			return false;
-		}
-		return now >= targetTime;
-	} catch (error) {
-		console.error("判断时间是否过期出错:", error);
-		return false;
-	}
-}
+};
 
 // 随机选择函数
 function getRandomItems(array, count) {
@@ -66,7 +45,7 @@ exports.main = async (event, context) => {
 				endTime: _.lte(now),
 				hasDrawn: _.or(_.eq(false), _.exists(false)),
 			})
-			.limit(20) // the most 每次最多处理20个抽奖
+			.limit(20) // 每次最多处理20个抽奖
 			.get();
 
 		console.log(`找到 ${endedLotteries.data.length} 个需要开奖的抽奖活动`);
