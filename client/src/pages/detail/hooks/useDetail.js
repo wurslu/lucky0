@@ -7,13 +7,6 @@ import {
   drawLottery,
   completeWxLogin,
 } from "../../../utils/api";
-import {
-  formatChineseTime,
-  formatShortChineseTime,
-  isExpired,
-  formatTime,
-  getCountdownString,
-} from "../../../utils/timeUtils";
 import { startCountdownTimer } from "../timeHandler";
 
 /**
@@ -37,6 +30,7 @@ export function useDetail() {
   const [countdown, setCountdown] = useState("00:00:00");
   const [countdownTimer, setCountdownTimer] = useState(null);
 
+  // 判断当前用户是否是中奖者
   const isUserWinner = () => {
     if (!userInfo || !lotteryInfo || !lotteryInfo.winners) return false;
     return lotteryInfo.winners.some(
@@ -99,7 +93,9 @@ export function useDetail() {
   // 判断抽奖是否已结束 - 仅基于时间判断
   const isLotteryEnded = (endTime) => {
     if (!endTime) return false;
-    return isExpired(endTime);
+    const now = new Date();
+    const targetTime = new Date(endTime);
+    return now >= targetTime;
   };
 
   // 开始倒计时
@@ -185,7 +181,7 @@ export function useDetail() {
           result.data.noParticipants && result.data.hasDrawn;
 
         // 判断抽奖是否已结束
-        const ended = isExpired(result.data.endTime);
+        const ended = isLotteryEnded(result.data.endTime);
 
         // 如果已开奖或无人参与，停止倒计时
         if (isAlreadyDrawn || isNoParticipants) {
@@ -490,6 +486,37 @@ export function useDetail() {
       !lotteryInfo.hasDrawn &&
       !lotteryInfo.noParticipants
     );
+  };
+
+  // 内联时间格式化函数
+  const formatChineseTime = (time) => {
+    if (!time) return "";
+    const date = new Date(time);
+    return date
+      .toLocaleString("zh-CN", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+      })
+      .replace(/\//g, "-");
+  };
+
+  const formatShortChineseTime = (time) => {
+    if (!time) return "";
+    const date = new Date(time);
+    return date
+      .toLocaleString("zh-CN", {
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      })
+      .replace(/\//g, "-");
   };
 
   return {

@@ -13,36 +13,44 @@ import {
 } from '@tarojs/components';
 import { createLottery } from '../../utils/api';
 import './index.scss';
-import {
-  getCurrentISOString,
-  getFutureDateTime,
-  combineDateTimeToISO,
-  isTimeExpired
-} from '../../utils/timeUtils';
-
 
 const Create = () => {
   // 状态管理
   const [loading, setLoading] = useState(false);
   const [userInfo, setUserInfo] = useState(null);
 
-  // 获取当前时间作为默认值
   const getCurrentDateTime = () => {
     const now = new Date();
-    const date = now.toISOString().split('T')[0];
+
+    // 获取日期部分：YYYY-MM-DD
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const date = `${year}-${month}-${day}`;
+
+    // 获取时间部分：HH:MM
     const hours = String(now.getHours()).padStart(2, '0');
     const minutes = String(now.getMinutes()).padStart(2, '0');
     const time = `${hours}:${minutes}`;
+
     return { date, time };
   };
 
-  // 计算未来时间
+
   const getFutureDateTime = (minutesToAdd) => {
     const futureTime = new Date(Date.now() + minutesToAdd * 60000);
-    const date = futureTime.toISOString().split('T')[0];
+
+    // 获取日期部分
+    const year = futureTime.getFullYear();
+    const month = String(futureTime.getMonth() + 1).padStart(2, '0');
+    const day = String(futureTime.getDate()).padStart(2, '0');
+    const date = `${year}-${month}-${day}`;
+
+    // 获取时间部分
     const hours = String(futureTime.getHours()).padStart(2, '0');
     const minutes = String(futureTime.getMinutes()).padStart(2, '0');
     const time = `${hours}:${minutes}`;
+
     return { date, time };
   };
 
@@ -157,9 +165,9 @@ const Create = () => {
       return;
     }
 
-    // 使用新的时间工具验证开奖时间 - 确保结束时间大于当前时间
-    const endDateTime = combineDateTimeToISO(endDate, endTime);
-    if (isTimeExpired(endDateTime)) {
+    // 验证开奖时间是否大于当前时间
+    const endDateTime = `${endDate}T${endTime}:00`;
+    if (new Date() >= new Date(endDateTime)) {
       Taro.showToast({ title: '开奖时间必须大于当前时间', icon: 'none' });
       return;
     }
@@ -190,11 +198,8 @@ const Create = () => {
     try {
       console.log("当前登录用户信息:", storedUserInfo);
 
-      // 使用新的时间工具获取当前时间作为开始时间
-      const startDateTime = getCurrentISOString();
-
-      // 组合开始和结束时间 - 确保不带Z后缀
-      const endDateTime = combineDateTimeToISO(endDate, endTime);
+      // 获取当前时间作为开始时间
+      const startDateTime = new Date().toLocaleString();
 
       console.log("开始时间:", startDateTime);
       console.log("结束时间:", endDateTime);
