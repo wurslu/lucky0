@@ -1,4 +1,4 @@
-// cloud/functions/autoDrawLottery/index.js (Simplified version)
+// Improved cloud/functions/autoDrawLottery/index.js
 const cloud = require("wx-server-sdk");
 
 // Initialize cloud environment
@@ -11,32 +11,55 @@ const _ = db.command;
 const lotteryCollection = db.collection("lotteries");
 const participantCollection = db.collection("participants");
 
-// Check if a date is in the past
+/**
+ * Check if a date is in the past - improved reliability
+ */
 function isExpired(date) {
 	if (!date) return false;
 	try {
 		const dateObj = new Date(date);
-		return dateObj < new Date();
+		const now = new Date();
+
+		// Add a small buffer (5 seconds) to account for processing time
+		// This helps prevent edge cases where time is just on the boundary
+		now.setSeconds(now.getSeconds() + 5);
+
+		return now >= dateObj;
 	} catch (error) {
 		console.error("Error checking if time has expired:", error);
 		return false;
 	}
 }
 
-// Random selection function
+/**
+ * Random selection function - ensuring fair selection
+ */
 function getRandomItems(array, count) {
-	const shuffled = [...array].sort(() => 0.5 - Math.random());
-	return shuffled.slice(0, Math.min(count, array.length));
+	// Create a copy to avoid modifying original array
+	const arrayCopy = [...array];
+	const result = [];
+
+	// Fisher-Yates shuffle algorithm for better randomness
+	for (let i = arrayCopy.length - 1; i > 0; i--) {
+		const j = Math.floor(Math.random() * (i + 1));
+		[arrayCopy[i], arrayCopy[j]] = [arrayCopy[j], arrayCopy[i]];
+	}
+
+	// Take the first 'count' elements
+	return arrayCopy.slice(0, Math.min(count, array.length));
 }
 
-// Auto draw main function
+/**
+ * Auto draw main function with improved reliability
+ */
 exports.main = async (event, context) => {
 	console.log("Starting auto draw function...");
 	const now = new Date();
+	console.log("Current time:", now.toISOString());
 	const results = [];
 
 	try {
-		// Improved query logic: first get all undrawn lotteries
+		// Step 1: Find all lotteries that haven't been drawn yet
 		const pendingLotteries = await lotteryCollection
 			.where({
 				hasDrawn: _.or(_.eq(false), _.exists(false)),
@@ -44,11 +67,16 @@ exports.main = async (event, context) => {
 			.limit(20) // Process at most 20 lotteries each time
 			.get();
 
-		// Manually filter out expired lotteries
+		console.log(`Found ${pendingLotteries.data.length} pending lotteries`);
+
+		// Step 2: Filter out expired lotteries
 		const endedLotteries = {
 			data: pendingLotteries.data.filter((lottery) => {
-				// Use simplified time check
-				return isExpired(lottery.endTime);
+				const isEnd = isExpired(lottery.endTime);
+				console.log(
+					`Lottery ${lottery._id} expired: ${isEnd}, endTime: ${lottery.endTime}`
+				);
+				return isEnd;
 			}),
 		};
 
@@ -70,9 +98,29 @@ exports.main = async (event, context) => {
 			console.log(
 				`Processing lottery ID: ${lottery._id}, Title: ${lottery.title}`
 			);
-			console.log(`Lottery end time: ${lottery.endTime}`);
+			console.log(
+				`Lottery end time: ${
+					lottery.endTime
+				}, Current time: ${now.toISOString()}`
+			);
 
 			try {
+				// Double check if lottery is already drawn - defensive check
+				const latestLotteryStatus = await lotteryCollection
+					.doc(lottery._id)
+					.get();
+				if (latestLotteryStatus.data.hasDrawn) {
+					console.log(`Lottery ${lottery._id} is already drawn, skipping`);
+					results.push({
+						lotteryId: lottery._id,
+						title: lottery.title,
+						success: true,
+						message: "Already drawn, skipped",
+						alreadyDrawn: true,
+					});
+					continue;
+				}
+
 				// Get all participants for this lottery
 				const participantsResult = await participantCollection
 					.where({
@@ -128,7 +176,7 @@ exports.main = async (event, context) => {
 					);
 
 					try {
-						// Use transaction to handle draw operation
+						// Try transaction first for atomic operation
 						const transaction = await db.startTransaction();
 
 						try {
@@ -168,17 +216,26 @@ exports.main = async (event, context) => {
 							resultItem.winnerCount = winnerCount;
 							resultItem.noParticipants = false;
 
-							console.log(`Lottery ${lottery._id} draw successful`);
+							console.log(
+								`Lottery ${lottery._id} draw successful with transaction`
+							);
 						} catch (error) {
 							// Transaction failed, rollback
 							await transaction.rollback();
-
-							// Try direct update
-							console.log(
-								`Transaction draw failed, trying direct update: ${error.message}`
+							console.error(
+								`Transaction failed for lottery ${lottery._id}:`,
+								error
 							);
+							throw error; // Re-throw to be caught by the outer try-catch
+						}
+					} catch (error) {
+						// If transaction fails, try direct updates as fallback
+						console.warn(
+							`Using direct updates as fallback for lottery ${lottery._id}`
+						);
 
-							// Update winner status
+						try {
+							// Update winner status directly
 							if (winnerIds.length > 0) {
 								for (const winnerId of winnerIds) {
 									await participantCollection.doc(winnerId).update({
@@ -190,7 +247,7 @@ exports.main = async (event, context) => {
 								}
 							}
 
-							// Update lottery status
+							// Update lottery status directly
 							await lotteryCollection.doc(lottery._id).update({
 								data: {
 									hasDrawn: true,
@@ -201,24 +258,27 @@ exports.main = async (event, context) => {
 								},
 							});
 
-							resultItem.message = `Direct update drawn, selected ${winnerCount} winners`;
+							resultItem.message = `Auto-drawn using direct updates, selected ${winnerCount} winners`;
 							resultItem.winnerCount = winnerCount;
 							resultItem.noParticipants = false;
-							resultItem.transactionFailed = true;
+							resultItem.usedDirectUpdate = true;
 
 							console.log(`Lottery ${lottery._id} direct update successful`);
+						} catch (directUpdateError) {
+							console.error(
+								`Both transaction and direct updates failed for lottery ${lottery._id}:`,
+								directUpdateError
+							);
+							throw directUpdateError;
 						}
-					} catch (error) {
-						// If both transaction and direct update fail
-						console.error(
-							`Lottery ${lottery._id} draw operation completely failed:`,
-							error
-						);
-						throw new Error(`Draw operation failed: ${error.message}`);
 					}
 				}
 
 				results.push(resultItem);
+
+				// Add a small delay between processing lotteries
+				// This can help prevent database contention
+				await new Promise((resolve) => setTimeout(resolve, 500));
 			} catch (error) {
 				console.error(`Error processing lottery ${lottery._id}:`, error);
 				results.push({
@@ -226,6 +286,7 @@ exports.main = async (event, context) => {
 					title: lottery.title,
 					success: false,
 					message: `Draw failed: ${error.message || "Unknown error"}`,
+					error: error.message,
 				});
 			}
 		}
@@ -234,6 +295,7 @@ exports.main = async (event, context) => {
 			success: true,
 			message: `Processed ${results.length} lotteries`,
 			results: results,
+			processingTime: new Date() - now + "ms",
 		};
 	} catch (error) {
 		console.error("Auto draw execution failed:", error);

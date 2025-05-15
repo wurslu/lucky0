@@ -1,4 +1,4 @@
-// client/src/pages/detail/hooks/useDetail.js (修复版)
+// Fixed useDetail.js with improved auto-draw handling
 import { useState, useEffect, useRef } from "react";
 import Taro from "@tarojs/taro";
 import {
@@ -8,9 +8,10 @@ import {
   completeWxLogin,
 } from "../../../utils/api";
 import { startCountdownTimer } from "../timeHandler";
+import { isExpired } from "../../../utils/timeUtils";
 
 /**
- * 抽奖详情状态管理Hook
+ * 抽奖详情状态管理Hook - 修复自动开奖问题
  */
 export function useDetail() {
   // 获取路由参数
@@ -19,6 +20,7 @@ export function useDetail() {
   // 使用 useRef 存储防止刷新的标志
   const refreshingRef = useRef(false);
   const initialLoadDoneRef = useRef(false);
+  const autoRefreshTimerRef = useRef(null);
 
   // 状态管理
   const [userInfo, setUserInfo] = useState(null);
@@ -36,6 +38,19 @@ export function useDetail() {
     return lotteryInfo.winners.some(
       (winner) => winner._openid === userInfo._openid
     );
+  };
+
+  // 清除所有定时器的函数
+  const clearAllTimers = () => {
+    if (countdownTimer) {
+      clearInterval(countdownTimer);
+      setCountdownTimer(null);
+    }
+
+    if (autoRefreshTimerRef.current) {
+      clearTimeout(autoRefreshTimerRef.current);
+      autoRefreshTimerRef.current = null;
+    }
   };
 
   useEffect(() => {
@@ -84,18 +99,14 @@ export function useDetail() {
 
     // 组件卸载时清除定时器
     return () => {
-      if (countdownTimer) {
-        clearInterval(countdownTimer);
-      }
+      clearAllTimers();
     };
   }, []);
 
   // 判断抽奖是否已结束 - 仅基于时间判断
   const isLotteryEnded = (endTime) => {
     if (!endTime) return false;
-    const now = new Date();
-    const targetTime = new Date(endTime);
-    return now >= targetTime;
+    return isExpired(endTime);
   };
 
   // 开始倒计时
@@ -155,6 +166,9 @@ export function useDetail() {
         // 标记初始加载完成
         initialLoadDoneRef.current = true;
 
+        // 清除任何现有定时器
+        clearAllTimers();
+
         // 更新抽奖信息
         setLotteryInfo(result.data);
 
@@ -185,21 +199,38 @@ export function useDetail() {
 
         // 如果已开奖或无人参与，停止倒计时
         if (isAlreadyDrawn || isNoParticipants) {
-          if (countdownTimer) {
-            clearInterval(countdownTimer);
-            setCountdownTimer(null);
-          }
+          clearAllTimers();
           setCountdown("00:00:00");
         } else if (!ended) {
           // 抽奖未结束且未开奖，设置倒计时
           startCountdown(result.data.endTime);
         } else {
-          // 抽奖已结束但未开奖，清除定时器
-          if (countdownTimer) {
-            clearInterval(countdownTimer);
-            setCountdownTimer(null);
-          }
+          // 抽奖已结束但未开奖，可能云函数延迟，设置自动检查
+          clearAllTimers();
           setCountdown("00:00:00");
+
+          // 如果已结束但未开奖，设置自动刷新检查开奖结果
+          if (!isAlreadyDrawn && !isNoParticipants) {
+            console.log("抽奖已结束但未开奖，设置自动检查序列");
+
+            // 延迟序列，检查开奖结果
+            const checkTimes = [3000, 6000, 10000, 15000];
+            let checkIndex = 0;
+
+            const scheduleNextCheck = () => {
+              if (checkIndex < checkTimes.length) {
+                autoRefreshTimerRef.current = setTimeout(() => {
+                  console.log(`自动检查开奖结果 #${checkIndex + 1}`);
+                  refreshingRef.current = false; // 重置刷新标志
+                  fetchLotteryDetail(lotteryIdToUse, true);
+                  checkIndex++;
+                  scheduleNextCheck();
+                }, checkTimes[checkIndex]);
+              }
+            };
+
+            scheduleNextCheck();
+          }
         }
       } else {
         console.error("获取抽奖详情失败:", result?.message);
@@ -227,10 +258,10 @@ export function useDetail() {
     } finally {
       setLoading(false);
 
-      // 3秒后重置刷新标志，允许下次刷新
+      // 重置刷新标志，允许下次刷新
       setTimeout(() => {
         refreshingRef.current = false;
-      }, 3000);
+      }, 2000);
     }
   };
 
@@ -315,7 +346,7 @@ export function useDetail() {
         // 重置刷新标志后刷新抽奖详情
         refreshingRef.current = false;
         setTimeout(() => {
-          fetchLotteryDetail();
+          fetchLotteryDetail(lotteryId, true);
         }, 1000);
       } else {
         Taro.hideLoading();
@@ -357,10 +388,7 @@ export function useDetail() {
 
             if (result && result.success) {
               // 清除倒计时定时器
-              if (countdownTimer) {
-                clearInterval(countdownTimer);
-                setCountdownTimer(null);
-              }
+              clearAllTimers();
 
               // 设置倒计时为0
               setCountdown("00:00:00");
@@ -385,7 +413,7 @@ export function useDetail() {
               // 重置刷新标志后刷新抽奖详情
               refreshingRef.current = false;
               setTimeout(() => {
-                fetchLotteryDetail();
+                fetchLotteryDetail(lotteryId, true);
               }, 1000);
             } else {
               Taro.hideLoading();

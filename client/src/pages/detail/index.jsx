@@ -1,6 +1,5 @@
 // client/src/pages/detail/index.jsx - 重构版
 import React from 'react';
-import Taro from '@tarojs/taro';
 import { View, Text, Button } from '@tarojs/components';
 import { useDetail } from './hooks/useDetail';
 import { renderWinners } from './renderUtils';

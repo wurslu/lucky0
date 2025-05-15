@@ -1,12 +1,12 @@
-// client/src/pages/detail/timeHandler.js (Simplified version)
+// Improved client/src/pages/detail/timeHandler.js
 import {
   formatChineseTime,
   getCountdownString,
-  formatTime,
+  isExpired,
 } from "../../utils/timeUtils";
 
 /**
- * Handle countdown logic
+ * Handle countdown logic with improved auto-draw mechanism
  */
 export const startCountdownTimer = (
   endTime,
@@ -38,7 +38,7 @@ export const startCountdownTimer = (
       return;
     }
 
-    // If end time has passed, display 00:00:00
+    // If end time has already passed, trigger refresh and display 00:00:00
     if (now >= endDateTime) {
       console.log("End time has passed, showing zero time");
       setCountdown("00:00:00");
@@ -47,31 +47,40 @@ export const startCountdownTimer = (
       if (initialLoadDoneRef.current && !refreshingRef.current) {
         console.log("First refresh after lottery ends");
 
-        // Set refresh flag
+        // Set refresh flag to prevent multiple refreshes
         refreshingRef.current = true;
 
-        // Set a delay to ensure it doesn't refresh immediately
+        // Immediate first check
+        if (lotteryId) {
+          fetchLotteryDetail(lotteryId, true); // Force fetch with true parameter
+        } else {
+          console.error("Cannot refresh lottery details: lotteryId is empty");
+        }
+
+        // First retry after 3 seconds
         setTimeout(() => {
-          // Pass lotteryId as parameter
+          console.log("First retry to get draw results");
           if (lotteryId) {
-            fetchLotteryDetail(lotteryId);
-          } else {
-            console.error("Cannot refresh lottery details: lotteryId is empty");
+            fetchLotteryDetail(lotteryId, true); // Force fetch
           }
 
-          // Set timer to refresh again to get possible draw results
+          // Second retry after another 5 seconds
           setTimeout(() => {
-            console.log("Trying to refresh again to get draw results");
+            console.log("Second retry to get draw results");
             refreshingRef.current = false; // Reset refresh flag
 
             if (lotteryId) {
-              fetchLotteryDetail(lotteryId);
-            } else {
-              console.error(
-                "Cannot refresh lottery details: lotteryId is empty"
-              );
+              fetchLotteryDetail(lotteryId, true);
             }
-          }, 8000); // Refresh again after 8 seconds
+
+            // Final retry after 10 more seconds
+            setTimeout(() => {
+              console.log("Final retry to get draw results");
+              if (lotteryId) {
+                fetchLotteryDetail(lotteryId, true);
+              }
+            }, 10000);
+          }, 5000);
         }, 3000);
       }
       return;
@@ -82,39 +91,55 @@ export const startCountdownTimer = (
 
     // Set new timer - update every second
     const timer = setInterval(() => {
-      const countdown = getCountdownString(endTime);
-      setCountdown(countdown);
+      const currentCountdown = getCountdownString(endTime);
+      setCountdown(currentCountdown);
 
-      // If countdown ends, clear timer and refresh data
-      if (countdown === "00:00:00") {
+      // Check if countdown has ended
+      if (currentCountdown === "00:00:00") {
         clearInterval(timer);
-        console.log("Countdown ended, refreshing data");
+        console.log(
+          "Countdown just reached zero, triggering draw refresh sequence"
+        );
 
-        // Set refresh flag
-        refreshingRef.current = true;
+        // Prevent multiple refreshes
+        if (!refreshingRef.current) {
+          refreshingRef.current = true;
 
-        // Delay refresh for a few seconds to give auto draw cloud function time to execute
-        setTimeout(() => {
+          // Show loading indicator to user
+          console.log("Initiating auto-draw sequence...");
+
+          // Try to trigger auto-draw and refresh in sequence
+          // First immediate check
           if (lotteryId) {
-            fetchLotteryDetail(lotteryId);
-          } else {
-            console.error("Cannot refresh lottery details: lotteryId is empty");
+            fetchLotteryDetail(lotteryId, true);
           }
 
-          // Refresh again after 5 seconds to get latest draw results
-          setTimeout(() => {
-            console.log("Trying to get draw results again");
-            refreshingRef.current = false; // Reset refresh flag
+          // Sequence of retries with increasing delays
+          const retryTimes = [3000, 5000, 8000, 15000];
+          let retryCount = 0;
 
-            if (lotteryId) {
-              fetchLotteryDetail(lotteryId);
+          const attemptRefresh = () => {
+            if (retryCount < retryTimes.length) {
+              setTimeout(() => {
+                console.log(
+                  `Retry attempt ${retryCount + 1} to get draw results`
+                );
+                if (lotteryId) {
+                  fetchLotteryDetail(lotteryId, true);
+                }
+                retryCount++;
+                attemptRefresh();
+              }, retryTimes[retryCount]);
             } else {
-              console.error(
-                "Cannot refresh lottery details: lotteryId is empty"
-              );
+              // Final attempt and reset flag
+              refreshingRef.current = false;
+              console.log("Auto-draw refresh sequence completed");
             }
-          }, 5000);
-        }, 3000);
+          };
+
+          // Start the retry sequence
+          attemptRefresh();
+        }
       }
     }, 1000);
 
