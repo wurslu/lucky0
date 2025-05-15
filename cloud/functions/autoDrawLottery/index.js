@@ -1,6 +1,5 @@
 // cloud/functions/autoDrawLottery/index.js - 使用公共模块版本
 const cloud = require("wx-server-sdk");
-const { timeHelper } = require("common");
 
 // 初始化云环境
 cloud.init({

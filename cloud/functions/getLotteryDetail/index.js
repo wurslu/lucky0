@@ -1,6 +1,6 @@
 // cloud/functions/getLotteryDetail/index.js - 使用公共模块版本
 const cloud = require("wx-server-sdk");
-const { timeHelper } = require("common");
+const { timeHelper } = require("./timeHelper");
 
 // 初始化云环境
 cloud.init({

@@ -1,6 +1,6 @@
 // cloud/functions/joinLottery/index.js - 使用公共模块版本
 const cloud = require("wx-server-sdk");
-const { timeHelper } = require("common");
+const { timeHelper } = require("./timeHelper");
 
 // 初始化云环境
 cloud.init({
@@ -42,7 +42,6 @@ exports.main = async (event, context) => {
 		console.log("本地结束时间:", lottery.endTimeLocal);
 		console.log("当前时间:", new Date());
 
-		// 检查结束时间 - 使用timeHelper判断抽奖是否已结束
 		const isEnded = timeHelper.isTimeExpired(
 			lottery.endTimeLocal || lottery.endTime
 		);

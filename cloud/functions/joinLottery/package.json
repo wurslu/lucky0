@@ -4,7 +4,6 @@
 	"description": "参与抽奖云函数",
 	"main": "index.js",
 	"dependencies": {
-		"common": "file:../common",
 		"wx-server-sdk": "latest"
 	},
 	"author": "",
