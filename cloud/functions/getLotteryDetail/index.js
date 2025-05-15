@@ -1,4 +1,4 @@
-// cloud/functions/getLotteryDetail/index.js - 修复版，统一使用_openid
+// cloud/functions/getLotteryDetail/index.js - 完整修复版
 const cloud = require("wx-server-sdk");
 
 // 初始化云环境
@@ -143,10 +143,10 @@ exports.main = async (event, context) => {
 
 		// 查询创建者信息 - 统一使用_openid
 		let creatorResult;
-		if (lottery.creatorId) {
+		if (lottery.creatorId || lottery._openid) {
 			creatorResult = await userCollection
 				.where({
-					_openid: lottery.creatorId,
+					_openid: lottery.creatorId || lottery._openid,
 				})
 				.get();
 		}
@@ -168,8 +168,57 @@ exports.main = async (event, context) => {
 		const participants = participantsResult.data;
 		console.log("参与者数量:", participants.length);
 
+		// 处理无人参与且已开奖的情况
+		if (lottery.hasDrawn && lottery.noParticipants) {
+			console.log("抽奖已开奖但无人参与");
+			return {
+				success: true,
+				data: {
+					...lottery,
+					creator,
+					participants: [],
+					winners: [],
+					isEnded: true,
+					noParticipants: true,
+				},
+			};
+		}
+
+		// 如果没有参与者但已经标记为已开奖
+		if (participants.length === 0 && lottery.hasDrawn) {
+			console.log("抽奖已开奖但无人参与 (未显式标记)");
+
+			// 异步更新标记为无人参与
+			lotteryCollection
+				.doc(id)
+				.update({
+					data: {
+						noParticipants: true,
+					},
+				})
+				.catch((err) => {
+					console.error("更新为无人参与状态失败:", err);
+				});
+
+			return {
+				success: true,
+				data: {
+					...lottery,
+					creator,
+					participants: [],
+					winners: [],
+					isEnded: true,
+					noParticipants: true,
+				},
+			};
+		}
+
 		// 查询参与者详细信息 - 统一使用_openid
-		const participantOpenIds = participants.map((p) => p._openid);
+		const participantOpenIds = participants
+			.map((p) => p._openid)
+			.filter((id) => id);
+
+		console.log("参与者openid列表:", participantOpenIds);
 
 		let participantUsers = [];
 		if (participantOpenIds.length > 0) {
@@ -207,7 +256,9 @@ exports.main = async (event, context) => {
 		// 获取中奖者信息
 		let winners = [];
 
-		if (lottery.hasDrawn && participantsWithUser.length > 0) {
+		if (lottery.hasDrawn && participants.length > 0) {
+			console.log("抽奖已开奖，开始查询中奖者");
+
 			// 直接查询中奖者记录
 			const winnersResult = await participantCollection
 				.where({
@@ -216,8 +267,11 @@ exports.main = async (event, context) => {
 				})
 				.get();
 
+			console.log("中奖者查询结果:", winnersResult);
+
 			if (winnersResult.data && winnersResult.data.length > 0) {
 				console.log("找到中奖者记录:", winnersResult.data.length);
+				console.log("中奖者原始数据:", JSON.stringify(winnersResult.data));
 
 				// 将找到的中奖者与用户信息合并
 				winners = winnersResult.data.map((winnerData) => {
@@ -230,15 +284,107 @@ exports.main = async (event, context) => {
 				});
 
 				console.log("处理后的中奖者:", winners.length);
+				console.log("中奖者详情:", JSON.stringify(winners));
 			} else {
 				console.log("通过查询未找到中奖者记录");
+
+				// 如果时间已过且标记为已开奖，但没有找到中奖者记录
+				// 可能是开奖过程中出错，尝试进行补救
+
+				if (
+					isEnded &&
+					lottery.hasDrawn &&
+					!lottery.noParticipants &&
+					lottery.winnerCount > 0
+				) {
+					console.log("检测到时间已过但没有中奖者，尝试重新选择中奖者");
+
+					try {
+						// 随机选择中奖者
+						const winnerCount = Math.min(
+							lottery.prizeCount || 1,
+							participants.length
+						);
+						const selectedParticipants = participants
+							.sort(() => 0.5 - Math.random())
+							.slice(0, winnerCount);
+
+						console.log("补救选择的中奖者:", selectedParticipants.length);
+
+						// 更新中奖状态
+						for (const winner of selectedParticipants) {
+							await participantCollection.doc(winner._id).update({
+								data: {
+									isWinner: true,
+									updateTime: db.serverDate(),
+								},
+							});
+						}
+
+						// 将选中的参与者作为中奖者返回
+						winners = selectedParticipants.map((winner) => {
+							const userInfo = participantMap[winner._openid] || {};
+							return {
+								...winner,
+								...userInfo,
+								isWinner: true,
+							};
+						});
+
+						console.log("已重新选择中奖者:", winners.length);
+					} catch (error) {
+						console.error("补救中奖者失败:", error);
+					}
+				}
 			}
 		}
 
 		// 即使没有中奖者记录，也尝试从参与者中筛选isWinner为true的记录
-		if (winners.length === 0 && lottery.hasDrawn) {
+		if (winners.length === 0 && lottery.hasDrawn && participants.length > 0) {
 			winners = participantsWithUser.filter((p) => p.isWinner === true);
 			console.log("从参与者中筛选出的中奖者:", winners.length);
+
+			// 如果仍然没有找到中奖者但抽奖已开奖且有参与者
+			if (winners.length === 0 && lottery.winnerCount > 0) {
+				console.log("警告: 抽奖已开奖但没有找到中奖者，尝试从参与者中随机选择");
+
+				try {
+					// 随机选择中奖者
+					const winnerCount = Math.min(
+						lottery.prizeCount || 1,
+						participants.length
+					);
+					const selectedParticipants = participants
+						.sort(() => 0.5 - Math.random())
+						.slice(0, winnerCount);
+
+					console.log("补救选择的中奖者:", selectedParticipants.length);
+
+					// 更新中奖状态
+					for (const winner of selectedParticipants) {
+						await participantCollection.doc(winner._id).update({
+							data: {
+								isWinner: true,
+								updateTime: db.serverDate(),
+							},
+						});
+					}
+
+					// 将选中的参与者作为中奖者返回
+					winners = selectedParticipants.map((winner) => {
+						const userInfo = participantMap[winner._openid] || {};
+						return {
+							...winner,
+							...userInfo,
+							isWinner: true,
+						};
+					});
+
+					console.log("已重新选择中奖者:", winners.length);
+				} catch (error) {
+					console.error("补救中奖者失败:", error);
+				}
+			}
 		}
 
 		// 更新抽奖记录中的实际中奖人数

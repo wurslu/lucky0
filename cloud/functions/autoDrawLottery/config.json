@@ -1,10 +1,12 @@
 {
-	"name": "autoDrawLottery",
+	"permissions": {
+		"openapi": []
+	},
 	"triggers": [
 		{
 			"name": "autoDrawTrigger",
 			"type": "timer",
-			"config": "*/10 * * * * * *"
+			"config": "0 */1 * * * * *"
 		}
 	]
 }
