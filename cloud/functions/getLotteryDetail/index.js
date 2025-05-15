@@ -1,6 +1,5 @@
-// cloud/functions/getLotteryDetail/index.js - 使用公共模块版本
+// cloud/functions/getLotteryDetail/index.js - 内联时间工具函数版本
 const cloud = require("wx-server-sdk");
-const { timeHelper } = require("./timeHelper");
 
 // 初始化云环境
 cloud.init({
@@ -12,6 +11,52 @@ const _ = db.command;
 const lotteryCollection = db.collection("lotteries");
 const userCollection = db.collection("users");
 const participantCollection = db.collection("participants");
+
+// 内联时间工具函数
+function normalizeTimeString(timeStr) {
+	if (!timeStr) return "";
+	try {
+		// 如果是日期对象，先转为ISO字符串
+		if (timeStr instanceof Date) {
+			timeStr = timeStr.toISOString();
+		}
+		// 如果包含Z后缀，移除它以避免时区问题
+		if (typeof timeStr === "string" && timeStr.includes("Z")) {
+			return timeStr.replace("Z", "");
+		}
+		return timeStr;
+	} catch (error) {
+		console.error("标准化时间字符串出错:", error);
+		return timeStr;
+	}
+}
+
+function isTimeExpired(timeStr) {
+	if (!timeStr) return false;
+	try {
+		const targetTime = new Date(normalizeTimeString(timeStr));
+		const now = new Date();
+		// 检查日期是否有效
+		if (isNaN(targetTime.getTime())) {
+			console.error("无效的时间:", timeStr);
+			return false;
+		}
+		return now >= targetTime;
+	} catch (error) {
+		console.error("判断时间是否过期出错:", error);
+		return false;
+	}
+}
+
+function getCurrentStandardTime() {
+	try {
+		const now = new Date();
+		return now.toISOString().replace("Z", "");
+	} catch (error) {
+		console.error("获取当前标准时间出错:", error);
+		return new Date().toISOString();
+	}
+}
 
 // 主函数
 exports.main = async (event, context) => {
@@ -42,8 +87,8 @@ exports.main = async (event, context) => {
 		// 处理时区问题 - 确保有本地时间格式
 		if (!lottery.endTimeLocal && lottery.endTime) {
 			try {
-				// 使用内部函数标准化时间
-				const endTimeNormalized = timeHelper.normalizeTimeString(
+				// 使用内联函数标准化时间
+				const endTimeNormalized = normalizeTimeString(
 					lottery.endTime.toISOString
 						? lottery.endTime.toISOString()
 						: lottery.endTime
@@ -74,7 +119,7 @@ exports.main = async (event, context) => {
 		// 同样处理开始时间
 		if (!lottery.startTimeLocal && lottery.startTime) {
 			try {
-				const startTimeNormalized = timeHelper.normalizeTimeString(
+				const startTimeNormalized = normalizeTimeString(
 					lottery.startTime.toISOString
 						? lottery.startTime.toISOString()
 						: lottery.startTime
@@ -206,10 +251,15 @@ exports.main = async (event, context) => {
 			};
 		});
 
-		// 判断抽奖是否已结束 - 使用时间工具函数
-		const isEnded = timeHelper.isTimeExpired(
-			lottery.endTimeLocal || lottery.endTime
-		);
+		// 判断抽奖是否已结束 - 使用内联函数
+		let isEnded = false;
+		try {
+			isEnded = isTimeExpired(lottery.endTimeLocal || lottery.endTime);
+			console.log("抽奖是否已结束:", isEnded);
+		} catch (error) {
+			console.error("判断抽奖是否结束时出错:", error);
+			console.error("结束时间:", lottery.endTimeLocal || lottery.endTime);
+		}
 
 		// 获取中奖者信息 - 使用参与者中的isWinner字段
 		console.log("开始查询中奖者，数据库中的标记:");

@@ -1,4 +1,4 @@
-// cloud/functions/drawLottery/index.js - 使用公共模块版本
+// cloud/functions/drawLottery/index.js - 内联时间工具函数版本
 const cloud = require("wx-server-sdk");
 
 // 初始化云环境

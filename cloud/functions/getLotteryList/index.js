@@ -1,6 +1,5 @@
-// cloud/functions/getLotteryList/index.js - 使用公共模块版本
+// cloud/functions/getLotteryList/index.js - 内联时间工具函数版本
 const cloud = require("wx-server-sdk");
-const { timeHelper } = require("./timeHelper");
 
 // 初始化云环境
 cloud.init({
@@ -11,6 +10,42 @@ cloud.init({
 const db = cloud.database();
 const _ = db.command;
 const lotteryCollection = db.collection("lotteries");
+
+// 内联时间工具函数
+function normalizeTimeString(timeStr) {
+	if (!timeStr) return "";
+	try {
+		// 如果是日期对象，先转为ISO字符串
+		if (timeStr instanceof Date) {
+			timeStr = timeStr.toISOString();
+		}
+		// 如果包含Z后缀，移除它以避免时区问题
+		if (typeof timeStr === "string" && timeStr.includes("Z")) {
+			return timeStr.replace("Z", "");
+		}
+		return timeStr;
+	} catch (error) {
+		console.error("标准化时间字符串出错:", error);
+		return timeStr;
+	}
+}
+
+function isTimeExpired(timeStr) {
+	if (!timeStr) return false;
+	try {
+		const targetTime = new Date(normalizeTimeString(timeStr));
+		const now = new Date();
+		// 检查日期是否有效
+		if (isNaN(targetTime.getTime())) {
+			console.error("无效的时间:", timeStr);
+			return false;
+		}
+		return now >= targetTime;
+	} catch (error) {
+		console.error("判断时间是否过期出错:", error);
+		return false;
+	}
+}
 
 // 主函数
 exports.main = async (event, context) => {
@@ -72,10 +107,15 @@ exports.main = async (event, context) => {
 
 			// 组合数据，并添加isEnded标志
 			lotteriesWithCreator = lotteriesWithCreator.map((lottery) => {
-				// 判断是否已结束 - 使用timeHelper判断
-				const isEnded = timeHelper.isTimeExpired(
-					lottery.endTimeLocal || lottery.endTime
-				);
+				// 判断是否已结束 - 使用内联函数判断
+				let isEnded = false;
+				try {
+					isEnded = isTimeExpired(lottery.endTimeLocal || lottery.endTime);
+					console.log(`抽奖ID: ${lottery._id} 是否已结束: ${isEnded}`);
+				} catch (error) {
+					console.error(`判断抽奖ID: ${lottery._id} 是否结束时出错:`, error);
+					console.error("结束时间:", lottery.endTimeLocal || lottery.endTime);
+				}
 
 				// 构建返回结果
 				const result = {
