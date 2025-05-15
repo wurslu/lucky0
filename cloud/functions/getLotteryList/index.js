@@ -1,5 +1,6 @@
-// cloud/functions/getLotteryList/index.js - 移除status依赖的版本
+// cloud/functions/getLotteryList/index.js - 使用公共模块版本
 const cloud = require("wx-server-sdk");
+const { timeHelper } = require("common");
 
 // 初始化云环境
 cloud.init({
@@ -71,9 +72,10 @@ exports.main = async (event, context) => {
 
 			// 组合数据，并添加isEnded标志
 			lotteriesWithCreator = lotteriesWithCreator.map((lottery) => {
-				// 判断是否已结束 - 基于时间判断
-				const endTime = new Date(lottery.endTimeLocal || lottery.endTime);
-				const isEnded = now >= endTime;
+				// 判断是否已结束 - 使用timeHelper判断
+				const isEnded = timeHelper.isTimeExpired(
+					lottery.endTimeLocal || lottery.endTime
+				);
 
 				// 构建返回结果
 				const result = {

@@ -1,5 +1,6 @@
-// cloud/functions/testDrawSpecificLottery/index.js
+// cloud/functions/testDrawSpecificLottery/index.js - 使用公共模块版本
 const cloud = require("wx-server-sdk");
+const { timeHelper } = require("common");
 
 // 初始化云环境
 cloud.init({
@@ -53,9 +54,37 @@ exports.main = async (event, context) => {
 			.count();
 
 		if (winnerResult.total > 0) {
+			console.log("该抽奖已有中奖者数量:", winnerResult.total);
+
+			// 检查抽奖状态是否正确
+			if (!lottery.hasDrawn) {
+				console.log("数据不一致: 有中奖者但hasDrawn=false，尝试修复");
+
+				// 修复hasDrawn状态
+				await lotteryCollection.doc(lotteryId).update({
+					data: {
+						hasDrawn: true,
+						winnerCount: winnerResult.total,
+						updateTime: db.serverDate(),
+					},
+				});
+
+				return {
+					success: true,
+					message: "已修复抽奖状态，请刷新页面",
+					data: {
+						winnerCount: winnerResult.total,
+						fixed: true,
+					},
+				};
+			}
+
 			return {
 				success: false,
 				message: "该抽奖已有中奖者，无法重复开奖",
+				data: {
+					winnerCount: winnerResult.total,
+				},
 			};
 		}
 
@@ -70,9 +99,24 @@ exports.main = async (event, context) => {
 		console.log(`参与者数量: ${participants.length}`);
 
 		if (participants.length === 0) {
+			// 标记抽奖已开奖但无人参与
+			await lotteryCollection.doc(lotteryId).update({
+				data: {
+					hasDrawn: true,
+					noParticipants: true,
+					winnerCount: 0,
+					drawTime: db.serverDate(),
+					updateTime: db.serverDate(),
+				},
+			});
+
 			return {
-				success: false,
-				message: "无人参与，无法开奖",
+				success: true,
+				message: "无人参与，已标记为已开奖",
+				data: {
+					winnerCount: 0,
+					noParticipants: true,
+				},
 			};
 		}
 
@@ -83,12 +127,15 @@ exports.main = async (event, context) => {
 		const winners = getRandomItems(participants, winnerCount);
 		const winnerIds = winners.map((w) => w._id);
 
+		console.log(`已选择 ${winnerIds.length} 名中奖者`);
+
 		// 使用事务更新
 		const transaction = await db.startTransaction();
 
 		try {
 			// 更新中奖者状态
 			if (winnerIds.length > 0) {
+				// 使用事务更新所有中奖者
 				await transaction
 					.collection("participants")
 					.where({
@@ -110,7 +157,10 @@ exports.main = async (event, context) => {
 				.doc(lotteryId)
 				.update({
 					data: {
+						hasDrawn: true,
+						noParticipants: false,
 						winnerCount: winnerCount,
+						drawTime: db.serverDate(),
 						updateTime: db.serverDate(),
 					},
 				});
@@ -131,11 +181,50 @@ exports.main = async (event, context) => {
 			await transaction.rollback();
 			console.error("测试开奖事务失败:", error);
 
-			return {
-				success: false,
-				message: "测试开奖事务失败: " + (error.message || "未知错误"),
-				error,
-			};
+			// 尝试直接更新
+			try {
+				console.log("事务失败，尝试直接更新");
+
+				// 直接更新中奖者状态
+				for (const winnerId of winnerIds) {
+					await participantCollection.doc(winnerId).update({
+						data: {
+							isWinner: true,
+							updateTime: db.serverDate(),
+						},
+					});
+				}
+
+				// 更新抽奖记录
+				await lotteryCollection.doc(lotteryId).update({
+					data: {
+						hasDrawn: true,
+						noParticipants: false,
+						winnerCount: winnerCount,
+						drawTime: db.serverDate(),
+						updateTime: db.serverDate(),
+					},
+				});
+
+				return {
+					success: true,
+					message: "测试开奖成功（直接更新）",
+					data: {
+						winnerCount,
+						winnerIds,
+					},
+				};
+			} catch (directError) {
+				console.error("直接更新也失败:", directError);
+
+				return {
+					success: false,
+					message:
+						"测试开奖事务和直接更新都失败: " + (error.message || "未知错误"),
+					error: error.message,
+					directError: directError.message,
+				};
+			}
 		}
 	} catch (error) {
 		console.error("测试开奖失败:", error);
@@ -143,7 +232,7 @@ exports.main = async (event, context) => {
 		return {
 			success: false,
 			message: "测试开奖失败: " + (error.message || "未知错误"),
-			error,
+			error: error.message,
 		};
 	}
 };

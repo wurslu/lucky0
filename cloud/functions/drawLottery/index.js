@@ -1,5 +1,6 @@
-// cloud/functions/drawLottery/index.js - 完全修复版
+// cloud/functions/drawLottery/index.js - 使用公共模块版本
 const cloud = require("wx-server-sdk");
+const { timeHelper } = require("common");
 
 // 初始化云环境
 cloud.init({

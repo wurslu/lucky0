@@ -1,5 +1,6 @@
-// cloud/functions/joinLottery/index.js - 修复版，统一使用_openid
+// cloud/functions/joinLottery/index.js - 使用公共模块版本
 const cloud = require("wx-server-sdk");
+const { timeHelper } = require("common");
 
 // 初始化云环境
 cloud.init({
@@ -38,13 +39,15 @@ exports.main = async (event, context) => {
 		// 调试信息
 		console.log("抽奖信息:", lottery);
 		console.log("结束时间:", lottery.endTime);
+		console.log("本地结束时间:", lottery.endTimeLocal);
 		console.log("当前时间:", new Date());
 
-		// 检查结束时间 - 判断抽奖是否已结束
-		const endTime = new Date(lottery.endTimeLocal || lottery.endTime);
-		const now = new Date();
+		// 检查结束时间 - 使用timeHelper判断抽奖是否已结束
+		const isEnded = timeHelper.isTimeExpired(
+			lottery.endTimeLocal || lottery.endTime
+		);
 
-		if (now > endTime) {
+		if (isEnded) {
 			return {
 				success: false,
 				message: "该抽奖已过期，无法参与",

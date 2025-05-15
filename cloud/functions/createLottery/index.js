@@ -1,5 +1,6 @@
-// cloud/functions/createLottery/index.js - 修复版，统一使用_openid
+// cloud/functions/createLottery/index.js - 使用公共模块版本
 const cloud = require("wx-server-sdk");
+const { timeHelper } = require("common");
 
 // 初始化云环境
 cloud.init({
@@ -9,40 +10,6 @@ cloud.init({
 const db = cloud.database();
 const lotteryCollection = db.collection("lotteries");
 const userCollection = db.collection("users");
-
-/**
- * 标准化时间字符串，处理可能的时区问题
- * @param {string} timeStr 时间字符串
- * @returns {string} 标准化后的时间字符串
- */
-function normalizeTimeString(timeStr) {
-	if (!timeStr) return "";
-
-	try {
-		// 如果包含Z后缀，移除它以避免时区问题
-		if (typeof timeStr === "string" && timeStr.includes("Z")) {
-			return timeStr.replace("Z", "");
-		}
-		return timeStr;
-	} catch (error) {
-		console.error("标准化时间字符串出错:", error);
-		return timeStr;
-	}
-}
-
-/**
- * 获取当前标准时间字符串（不带Z后缀）
- * @returns {string} 当前时间的标准字符串
- */
-function getCurrentStandardTime() {
-	try {
-		const now = new Date();
-		return now.toISOString().replace("Z", "");
-	} catch (error) {
-		console.error("获取当前标准时间出错:", error);
-		return new Date().toISOString();
-	}
-}
 
 // 主函数
 exports.main = async (event, context) => {
@@ -63,10 +30,10 @@ exports.main = async (event, context) => {
 	}
 
 	// 规范化时间字符串，确保没有时区问题
-	const normalizedStartTime = normalizeTimeString(
-		startTime || getCurrentStandardTime()
+	const normalizedStartTime = timeHelper.normalizeTimeString(
+		startTime || timeHelper.getCurrentStandardTime()
 	);
-	const normalizedEndTime = normalizeTimeString(endTime);
+	const normalizedEndTime = timeHelper.normalizeTimeString(endTime);
 
 	console.log("规范化后的开始时间:", normalizedStartTime);
 	console.log("规范化后的结束时间:", normalizedEndTime);

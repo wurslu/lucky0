@@ -1,5 +1,6 @@
-// cloud/functions/autoDrawLottery/index.js - 完全修复版
+// cloud/functions/autoDrawLottery/index.js - 使用公共模块版本
 const cloud = require("wx-server-sdk");
+const { timeHelper } = require("common");
 
 // 初始化云环境
 cloud.init({
@@ -15,56 +16,6 @@ const participantCollection = db.collection("participants");
 function getRandomItems(array, count) {
 	const shuffled = [...array].sort(() => 0.5 - Math.random());
 	return shuffled.slice(0, Math.min(count, array.length));
-}
-
-/**
- * 标准化时间字符串，处理可能的时区问题
- * @param {string} timeStr 时间字符串
- * @returns {string} 标准化后的时间字符串
- */
-function normalizeTimeString(timeStr) {
-	if (!timeStr) return "";
-
-	try {
-		// 如果是日期对象，先转为ISO字符串
-		if (timeStr instanceof Date) {
-			timeStr = timeStr.toISOString();
-		}
-
-		// 如果包含Z后缀，移除它以避免时区问题
-		if (typeof timeStr === "string" && timeStr.includes("Z")) {
-			return timeStr.replace("Z", "");
-		}
-		return timeStr;
-	} catch (error) {
-		console.error("标准化时间字符串出错:", error);
-		return timeStr;
-	}
-}
-
-/**
- * 判断时间是否已过期
- * @param {string|Date} timeStr 时间字符串或Date对象
- * @returns {boolean} 是否已过期
- */
-function isTimeExpired(timeStr) {
-	if (!timeStr) return false;
-
-	try {
-		const targetTime = new Date(normalizeTimeString(timeStr));
-		const now = new Date();
-
-		// 检查日期是否有效
-		if (isNaN(targetTime.getTime())) {
-			console.error("无效的时间:", timeStr);
-			return false;
-		}
-
-		return now >= targetTime;
-	} catch (error) {
-		console.error("判断时间是否过期出错:", error);
-		return false;
-	}
 }
 
 // 自动开奖主函数
